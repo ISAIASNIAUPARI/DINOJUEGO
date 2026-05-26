@@ -1,0 +1,1433 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#05060f" />
+<title>DINO ODYSSEY — Endless Runner</title>
+<style>
+  /* ============================================================
+     ESTILOS GLOBALES
+     - Reset, tipografías, layout a pantalla completa.
+     - El canvas dibuja el juego; los menús/HUD son DOM superpuesto
+       (más nítidos y fáciles de animar con CSS).
+     ============================================================ */
+  :root{
+    --neon:#00f0ff;
+    --neon2:#ff2bd6;
+    --gold:#ffd34d;
+    --good:#5cffb1;
+    --bad:#ff5d6c;
+    --glass:rgba(10,14,30,.55);
+    --glass-strong:rgba(8,11,24,.82);
+  }
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ width:100%; height:100%; overflow:hidden; background:#05060f; }
+  body{
+    font-family:"Segoe UI", "Trebuchet MS", system-ui, sans-serif;
+    color:#eaf6ff; user-select:none; touch-action:none;
+  }
+  #stage{ position:fixed; inset:0; }
+  canvas{ display:block; position:absolute; inset:0; width:100%; height:100%; }
+
+  /* Capa de viñeta cinematográfica encima del canvas */
+  #vignette{
+    position:absolute; inset:0; pointer-events:none; z-index:5;
+    box-shadow: inset 0 0 220px 40px rgba(0,0,0,.66);
+    background:radial-gradient(120% 90% at 50% 42%, rgba(0,0,0,0) 55%, rgba(0,0,0,.35) 100%);
+    mix-blend-mode:multiply;
+  }
+  /* Destello al subir de nivel / récord */
+  #flash{ position:absolute; inset:0; pointer-events:none; z-index:6; opacity:0; background:#fff; }
+
+  /* ---------- HUD ARCADE ---------- */
+  #hud{
+    position:absolute; inset:0; z-index:10; pointer-events:none;
+    display:flex; flex-direction:column; justify-content:flex-start;
+    padding:14px clamp(12px,3vw,32px);
+    font-variant-numeric:tabular-nums;
+  }
+  .hud-row{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+  .hud-panel{
+    background:var(--glass); backdrop-filter:blur(8px);
+    border:1px solid rgba(255,255,255,.12); border-radius:14px;
+    padding:8px 14px; box-shadow:0 6px 24px rgba(0,0,0,.35);
+  }
+  .hud-label{ font-size:11px; letter-spacing:.18em; text-transform:uppercase; opacity:.7; }
+  .hud-value{ font-size:clamp(20px,3.4vw,30px); font-weight:800; letter-spacing:.02em; line-height:1.05;
+    text-shadow:0 0 14px rgba(0,240,255,.55); }
+  #scoreVal{ color:#fff; }
+  #bestVal{ color:var(--gold); text-shadow:0 0 14px rgba(255,211,77,.55); }
+  #distVal{ color:var(--neon); }
+  #coinVal{ color:var(--gold); }
+
+  /* Combo / multiplicador central */
+  #comboWrap{ position:absolute; top:18%; left:50%; transform:translateX(-50%); text-align:center;
+    opacity:0; transition:opacity .25s; }
+  #comboMult{ font-size:clamp(26px,6vw,52px); font-weight:900; color:var(--neon2);
+    text-shadow:0 0 22px rgba(255,43,214,.7); }
+  #comboTxt{ font-size:12px; letter-spacing:.3em; text-transform:uppercase; opacity:.8; }
+
+  /* Barra de power-up activo */
+  #pwrBar{ position:absolute; left:50%; bottom:88px; transform:translateX(-50%);
+    width:min(320px,60vw); height:10px; border-radius:8px; overflow:hidden;
+    background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.18); opacity:0; transition:opacity .2s; }
+  #pwrFill{ height:100%; width:100%; background:linear-gradient(90deg,var(--neon),var(--neon2)); }
+  #pwrName{ position:absolute; left:50%; bottom:104px; transform:translateX(-50%);
+    font-size:12px; letter-spacing:.22em; text-transform:uppercase; opacity:0; transition:opacity .2s;
+    text-shadow:0 0 12px rgba(0,240,255,.6); }
+
+  /* Nombre del bioma (transición) */
+  #biomeTag{ position:absolute; left:50%; top:46%; transform:translate(-50%,-50%);
+    font-size:clamp(26px,7vw,64px); font-weight:900; letter-spacing:.06em; text-align:center;
+    opacity:0; pointer-events:none; text-shadow:0 0 30px currentColor; white-space:nowrap; }
+
+  /* ---------- PANTALLAS (menú / pausa / game over) ---------- */
+  .screen{
+    position:absolute; inset:0; z-index:20; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:18px; text-align:center;
+    background:radial-gradient(120% 120% at 50% 30%, rgba(10,16,40,.35), rgba(3,4,12,.86));
+    backdrop-filter:blur(6px); padding:24px;
+  }
+  .screen.hidden{ display:none; }
+  .title{
+    font-size:clamp(40px,11vw,104px); font-weight:900; letter-spacing:.04em; line-height:.95;
+    background:linear-gradient(90deg,#00f0ff,#7b5cff,#ff2bd6,#ffd34d,#00f0ff);
+    background-size:300% 100%; -webkit-background-clip:text; background-clip:text; color:transparent;
+    animation:hue 6s linear infinite, floaty 4s ease-in-out infinite;
+    filter:drop-shadow(0 6px 30px rgba(123,92,255,.5));
+  }
+  .subtitle{ font-size:clamp(13px,2.6vw,18px); letter-spacing:.32em; text-transform:uppercase; opacity:.8; }
+  @keyframes hue{ to{ background-position:300% 0; } }
+  @keyframes floaty{ 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(-10px); } }
+  @keyframes popin{ 0%{ transform:scale(.6); opacity:0; } 100%{ transform:scale(1); opacity:1; } }
+
+  .btn{
+    pointer-events:auto; cursor:pointer; border:none; border-radius:16px;
+    padding:16px 40px; font-size:clamp(16px,3.2vw,22px); font-weight:800; letter-spacing:.05em;
+    color:#04121a; background:linear-gradient(135deg,#00f0ff,#7b5cff);
+    box-shadow:0 10px 30px rgba(0,240,255,.35), inset 0 1px 0 rgba(255,255,255,.4);
+    transition:transform .12s ease, box-shadow .12s ease; text-transform:uppercase;
+  }
+  .btn:hover{ transform:translateY(-2px) scale(1.03); box-shadow:0 16px 40px rgba(0,240,255,.5); }
+  .btn:active{ transform:translateY(1px) scale(.99); }
+  .btn.ghost{ background:transparent; color:#eaf6ff; border:1.5px solid rgba(255,255,255,.3);
+    box-shadow:none; padding:12px 28px; font-size:15px; }
+  .btn.ghost:hover{ background:rgba(255,255,255,.08); }
+
+  .hint{ font-size:clamp(12px,2.4vw,15px); opacity:.7; max-width:560px; line-height:1.6; }
+  .kbd{ display:inline-block; padding:2px 9px; border-radius:7px; background:rgba(255,255,255,.12);
+    border:1px solid rgba(255,255,255,.2); font-size:.9em; margin:0 2px; }
+
+  .stats{ display:flex; gap:22px; flex-wrap:wrap; justify-content:center; margin-top:4px; }
+  .stat{ background:var(--glass); border:1px solid rgba(255,255,255,.12); border-radius:14px; padding:12px 22px; min-width:120px; }
+  .stat b{ display:block; font-size:clamp(22px,5vw,34px); font-weight:900; }
+  .stat span{ font-size:11px; letter-spacing:.2em; text-transform:uppercase; opacity:.65; }
+  #goTitle{ font-size:clamp(34px,9vw,72px); font-weight:900; color:var(--bad);
+    text-shadow:0 0 30px rgba(255,93,108,.6); animation:popin .4s ease; }
+  #newBest{ color:var(--gold); font-weight:900; letter-spacing:.2em; text-transform:uppercase;
+    text-shadow:0 0 18px rgba(255,211,77,.7); animation:floaty 1.6s ease-in-out infinite; }
+
+  /* Pie con créditos / mute */
+  .topright{ position:absolute; top:14px; right:clamp(12px,3vw,32px); z-index:25; display:flex; gap:8px; }
+  .icon-btn{ pointer-events:auto; cursor:pointer; width:46px; height:46px; border-radius:12px;
+    background:var(--glass); border:1px solid rgba(255,255,255,.14); color:#eaf6ff;
+    font-size:20px; display:grid; place-items:center; backdrop-filter:blur(8px); }
+  .icon-btn:active{ transform:scale(.94); }
+
+  /* ---------- CONTROLES TÁCTILES ---------- */
+  #touch{ position:absolute; inset:auto 0 0 0; z-index:15; display:none;
+    justify-content:space-between; padding:0 18px 22px; pointer-events:none; }
+  #touch.show{ display:flex; }
+  .tbtn{ pointer-events:auto; width:clamp(96px,28vw,150px); height:clamp(96px,28vw,150px);
+    border-radius:24px; background:var(--glass); border:1.5px solid rgba(255,255,255,.18);
+    color:#eaf6ff; font-size:13px; font-weight:800; letter-spacing:.12em; text-transform:uppercase;
+    display:grid; place-items:center; backdrop-filter:blur(8px); box-shadow:0 8px 28px rgba(0,0,0,.4); }
+  .tbtn .ico{ font-size:38px; line-height:1; }
+  .tbtn:active{ transform:scale(.94); background:rgba(0,240,255,.2); }
+
+  .credit{ position:absolute; bottom:10px; left:50%; transform:translateX(-50%); z-index:11;
+    font-size:11px; letter-spacing:.2em; opacity:.35; text-transform:uppercase; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="game"></canvas>
+  <div id="vignette"></div>
+  <div id="flash"></div>
+
+  <!-- ====================== HUD ====================== -->
+  <div id="hud">
+    <div class="hud-row">
+      <div class="hud-panel">
+        <div class="hud-label">Puntos</div>
+        <div class="hud-value" id="scoreVal">0</div>
+      </div>
+      <div style="display:flex; gap:10px;">
+        <div class="hud-panel">
+          <div class="hud-label">Distancia</div>
+          <div class="hud-value" id="distVal">0 m</div>
+        </div>
+        <div class="hud-panel">
+          <div class="hud-label">Monedas</div>
+          <div class="hud-value" id="coinVal">0</div>
+        </div>
+        <div class="hud-panel">
+          <div class="hud-label">Récord</div>
+          <div class="hud-value" id="bestVal">0</div>
+        </div>
+      </div>
+    </div>
+    <div id="comboWrap">
+      <div id="comboMult">x1</div>
+      <div id="comboTxt">Combo</div>
+    </div>
+    <div id="biomeTag"></div>
+    <div id="pwrName"></div>
+    <div id="pwrBar"><div id="pwrFill"></div></div>
+  </div>
+
+  <!-- ====================== BOTONES SUPERIORES ====================== -->
+  <div class="topright">
+    <button class="icon-btn" id="muteBtn" title="Silenciar">&#128266;</button>
+    <button class="icon-btn" id="pauseBtn" title="Pausa">&#10073;&#10073;</button>
+  </div>
+
+  <!-- ====================== CONTROLES TÁCTILES ====================== -->
+  <div id="touch">
+    <button class="tbtn" id="duckBtn"><div><div class="ico">&#9660;</div>Agacharse</div></button>
+    <button class="tbtn" id="jumpBtn"><div><div class="ico">&#9650;</div>Saltar</div></button>
+  </div>
+
+  <!-- ====================== MENÚ INICIAL ====================== -->
+  <div class="screen" id="menu">
+    <div class="subtitle">Endless Runner</div>
+    <h1 class="title">DINO&nbsp;ODYSSEY</h1>
+    <div class="hint">
+      Corre a través de 9 mundos vivos. <span class="kbd">Espacio</span>/<span class="kbd">&uarr;</span> para saltar,
+      <span class="kbd">&darr;</span> para agacharte. Recoge monedas, encadena combos y sobrevive a la velocidad infinita.
+    </div>
+    <button class="btn" id="playBtn">&#9654; Jugar</button>
+    <button class="btn ghost" id="howBtn">Cómo se juega</button>
+    <div class="credit">WASD / Flechas / Táctil · Récord guardado localmente</div>
+  </div>
+
+  <!-- ====================== PAUSA ====================== -->
+  <div class="screen hidden" id="pause">
+    <h1 class="title" style="font-size:clamp(32px,8vw,72px)">PAUSA</h1>
+    <button class="btn" id="resumeBtn">Continuar</button>
+    <button class="btn ghost" id="restartBtn2">Reiniciar</button>
+    <button class="btn ghost" id="quitBtn">Salir al menú</button>
+  </div>
+
+  <!-- ====================== GAME OVER ====================== -->
+  <div class="screen hidden" id="over">
+    <div id="newBest" style="display:none">¡Nuevo récord!</div>
+    <h1 id="goTitle">GAME OVER</h1>
+    <div class="stats">
+      <div class="stat"><b id="goScore">0</b><span>Puntos</span></div>
+      <div class="stat"><b id="goDist">0</b><span>Metros</span></div>
+      <div class="stat"><b id="goCoins">0</b><span>Monedas</span></div>
+      <div class="stat"><b id="goBest">0</b><span>Récord</span></div>
+    </div>
+    <button class="btn" id="againBtn">&#10227; Reintentar</button>
+    <button class="btn ghost" id="menuBtn">Menú principal</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ════════════════════════════════════════════════════════════════════════
+   DINO ODYSSEY — Endless runner avanzado en un solo archivo.
+   Tecnologías: Canvas 2D + Web Audio API. Sin librerías ni dependencias.
+
+   ARQUITECTURA (módulos lógicos dentro de un IIFE):
+     1.  Utils          → matemáticas, aleatoriedad, interpolación.
+     2.  AudioEngine     → sonidos y música 100% generados por código.
+     3.  Input           → teclado + táctil con buffer de salto y coyote-time.
+     4.  Pool            → reciclaje genérico de objetos (cero GC en runtime).
+     5.  Particles       → sistema de partículas reutilizable.
+     6.  Biomes          → 9 escenarios con paletas y clima propio.
+     7.  Parallax/Weather→ capas de profundidad + efectos climáticos.
+     8.  Player          → física de salto/agache + animación procedural.
+     9.  Entities        → obstáculos, monedas y power-ups (con pooling).
+     10. Spawner         → generación procedural inteligente por dificultad.
+     11. Camera          → shake + desplazamiento cinematográfico.
+     12. Game            → máquina de estados y bucle principal (deltaTime).
+   ════════════════════════════════════════════════════════════════════════ */
+(function(){
+
+/* ─────────────────────────────────────────────────────────────────────────
+   1) UTILIDADES
+   ───────────────────────────────────────────────────────────────────────── */
+const clamp = (v,a,b)=> v<a?a:(v>b?b:v);
+const lerp  = (a,b,t)=> a+(b-a)*t;
+const rand  = (a,b)=> a+Math.random()*(b-a);
+const randi = (a,b)=> Math.floor(rand(a,b+1));
+const pick  = arr => arr[(Math.random()*arr.length)|0];
+const TAU   = Math.PI*2;
+
+/** Interpola dos colores [r,g,b] y devuelve string rgb/rgba. */
+function mix(c1,c2,t,a){
+  const r=Math.round(lerp(c1[0],c2[0],t));
+  const g=Math.round(lerp(c1[1],c2[1],t));
+  const b=Math.round(lerp(c1[2],c2[2],t));
+  return a==null ? `rgb(${r},${g},${b})` : `rgba(${r},${g},${b},${a})`;
+}
+const rgba = (c,a)=> `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+
+/* Ruido pseudoaleatorio determinista (para siluetas de montañas estables). */
+function hashNoise(x){
+  const s = Math.sin(x*127.1)*43758.5453;
+  return s - Math.floor(s);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   2) MOTOR DE AUDIO  (Web Audio API — todo procedural)
+   - Efectos: salto, aterrizaje, agache, moneda, power-up, golpe, milestone.
+   - Música: secuenciador de arpegios cuyo tempo escala con la velocidad.
+   ───────────────────────────────────────────────────────────────────────── */
+const Audio = (()=>{
+  let ctx=null, master=null, musicGain=null, sfxGain=null;
+  let muted=false, started=false;
+  let musicTimer=null, step=0, tempo=300; // ms por nota (se reduce con velocidad)
+
+  // Escala pentatónica menor (suena épica y nunca disuena)
+  const SCALE=[0,3,5,7,10,12,15];
+  const baseFreq=f=>220*Math.pow(2,f/12);
+
+  function ensure(){
+    if(ctx) return;
+    const AC = window.AudioContext||window.webkitAudioContext;
+    if(!AC) return;
+    ctx = new AC();
+    master = ctx.createGain(); master.gain.value=0.0; master.connect(ctx.destination);
+    musicGain = ctx.createGain(); musicGain.gain.value=0.32; musicGain.connect(master);
+    sfxGain   = ctx.createGain(); sfxGain.gain.value=0.85;  sfxGain.connect(master);
+    // Fade-in suave del volumen general
+    master.gain.setValueAtTime(0, ctx.currentTime);
+    master.gain.linearRampToValueAtTime(muted?0:0.9, ctx.currentTime+0.8);
+  }
+  // Debe llamarse tras un gesto del usuario (política de autoplay).
+  function unlock(){ ensure(); if(ctx && ctx.state==='suspended') ctx.resume(); started=true; }
+
+  /** Oscilador básico con envolvente ADSR simplificada. */
+  function tone(freq,{type='sine',dur=0.18,vol=0.5,glide=0,dest=null}={}){
+    if(!ctx||muted) return;
+    const o=ctx.createOscillator(), g=ctx.createGain();
+    o.type=type; o.frequency.setValueAtTime(freq,ctx.currentTime);
+    if(glide) o.frequency.exponentialRampToValueAtTime(Math.max(40,freq*glide), ctx.currentTime+dur);
+    g.gain.setValueAtTime(0.0001,ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(vol,ctx.currentTime+0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001,ctx.currentTime+dur);
+    o.connect(g); g.connect(dest||sfxGain); o.start(); o.stop(ctx.currentTime+dur+0.02);
+  }
+  /** Ráfaga de ruido (impactos / explosiones). */
+  function noise(dur=0.3,vol=0.5,lp=1200){
+    if(!ctx||muted) return;
+    const n=Math.floor(ctx.sampleRate*dur);
+    const buf=ctx.createBuffer(1,n,ctx.sampleRate), d=buf.getChannelData(0);
+    for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*(1-i/n);
+    const src=ctx.createBufferSource(); src.buffer=buf;
+    const f=ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=lp;
+    const g=ctx.createGain(); g.gain.value=vol;
+    src.connect(f); f.connect(g); g.connect(sfxGain); src.start();
+  }
+
+  // ---- Efectos concretos ----
+  const sfx={
+    jump(){ tone(520,{type:'triangle',dur:0.22,vol:0.5,glide:2.2}); },
+    dblJump(){ tone(700,{type:'square',dur:0.18,vol:0.4,glide:2.0}); },
+    land(){ noise(0.12,0.3,500); tone(120,{type:'sine',dur:0.1,vol:0.3}); },
+    duck(){ tone(180,{type:'sawtooth',dur:0.12,vol:0.3,glide:0.6}); },
+    coin(){ tone(880,{type:'square',dur:0.07,vol:0.35}); setTimeout(()=>tone(1320,{type:'square',dur:0.1,vol:0.35}),60); },
+    power(){ [0,4,7,12].forEach((s,i)=>setTimeout(()=>tone(baseFreq(12+s),{type:'square',dur:0.16,vol:0.4}),i*70)); },
+    hit(){ noise(0.5,0.7,900); tone(90,{type:'sawtooth',dur:0.45,vol:0.5,glide:0.4}); },
+    shield(){ noise(0.2,0.4,2200); tone(660,{type:'sine',dur:0.25,vol:0.4,glide:1.5}); },
+    milestone(){ [0,7,12,19].forEach((s,i)=>setTimeout(()=>tone(baseFreq(12+s),{type:'triangle',dur:0.25,vol:0.4}),i*90)); },
+    turbo(){ tone(300,{type:'sawtooth',dur:0.6,vol:0.45,glide:3}); noise(0.4,0.3,3000); },
+    biome(){ [0,5,7].forEach((s,i)=>setTimeout(()=>tone(baseFreq(s),{type:'sine',dur:0.5,vol:0.3}),i*120)); },
+  };
+
+  /** Secuenciador de música: agenda una nota y reprograma la siguiente. */
+  function tick(){
+    if(!ctx){ return; }
+    const note = SCALE[step % SCALE.length];
+    const oct  = (step % (SCALE.length*2) >= SCALE.length) ? 12 : 0;
+    tone(baseFreq(note+oct), {type:'triangle', dur:tempo/1000*0.9, vol:0.18, dest:musicGain});
+    // Bajo cada 4 pasos
+    if(step%4===0) tone(baseFreq(note-12), {type:'sine', dur:tempo/1000*1.6, vol:0.22, dest:musicGain});
+    step++;
+    musicTimer=setTimeout(tick, tempo);
+  }
+  function startMusic(){ if(musicTimer||!ctx) return; step=0; tick(); }
+  function stopMusic(){ clearTimeout(musicTimer); musicTimer=null; }
+  function setTempo(speed01){ tempo = lerp(320,150,clamp(speed01,0,1)); } // más rápido = más intenso
+
+  function setMuted(m){
+    muted=m;
+    if(master&&ctx) master.gain.linearRampToValueAtTime(m?0:0.9, ctx.currentTime+0.15);
+  }
+  return { unlock, sfx, startMusic, stopMusic, setTempo, setMuted, get muted(){return muted;} };
+})();
+
+/* ─────────────────────────────────────────────────────────────────────────
+   3) ENTRADA  (teclado + táctil)
+   - jumpQueued: buffer de salto (pulsar justo antes de tocar suelo).
+   - duckHeld:   mantener para agacharse.
+   ───────────────────────────────────────────────────────────────────────── */
+const Input = {
+  jumpQueued:false, jumpHeld:false, duckHeld:false,
+  _bind(){
+    addEventListener('keydown', e=>{
+      if(['Space','ArrowUp','ArrowDown','ArrowLeft','KeyW','KeyS','Escape','Enter'].includes(e.code)) e.preventDefault();
+      if(e.repeat) return;
+      if(e.code==='Space'||e.code==='ArrowUp'||e.code==='KeyW'){ this.jumpQueued=true; this.jumpHeld=true; }
+      if(e.code==='ArrowDown'||e.code==='KeyS') this.duckHeld=true;
+      if(e.code==='Escape') Game.togglePause();
+      if(e.code==='Enter') Game.enterKey();
+    });
+    addEventListener('keyup', e=>{
+      if(e.code==='Space'||e.code==='ArrowUp'||e.code==='KeyW') this.jumpHeld=false;
+      if(e.code==='ArrowDown'||e.code==='KeyS') this.duckHeld=false;
+    });
+    // Botones táctiles
+    const jb=document.getElementById('jumpBtn'), db=document.getElementById('duckBtn');
+    const press=(el,down,up)=>{
+      el.addEventListener('touchstart',e=>{e.preventDefault();down();},{passive:false});
+      el.addEventListener('touchend',  e=>{e.preventDefault();up();},{passive:false});
+      el.addEventListener('mousedown', down); el.addEventListener('mouseup', up);
+      el.addEventListener('mouseleave', up);
+    };
+    press(jb, ()=>{ this.jumpQueued=true; this.jumpHeld=true; }, ()=>{ this.jumpHeld=false; });
+    press(db, ()=>{ this.duckHeld=true; }, ()=>{ this.duckHeld=false; });
+    // Tap en cualquier parte del lienzo = saltar (cómodo en móvil)
+    document.getElementById('game').addEventListener('touchstart', e=>{
+      if(Game.state==='play'){ this.jumpQueued=true; this.jumpHeld=true; }
+    },{passive:true});
+  },
+  consumeJump(){ const q=this.jumpQueued; this.jumpQueued=false; return q; }
+};
+
+/* ─────────────────────────────────────────────────────────────────────────
+   4) POOL genérico — recicla instancias para evitar fugas y GC.
+   ───────────────────────────────────────────────────────────────────────── */
+class Pool{
+  constructor(factory){ this.factory=factory; this.free=[]; this.active=[]; }
+  spawn(){ const o=this.free.pop()||this.factory(); o.dead=false; this.active.push(o); return o; }
+  /** Recorre activos; los marcados dead vuelven al pool. */
+  sweep(){
+    for(let i=this.active.length-1;i>=0;i--){
+      if(this.active[i].dead){ this.free.push(this.active[i]); this.active.splice(i,1); }
+    }
+  }
+  clear(){ while(this.active.length) this.free.push(this.active.pop()); }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   5) SISTEMA DE PARTÍCULAS reutilizable.
+   ───────────────────────────────────────────────────────────────────────── */
+const Particles = (()=>{
+  const pool = new Pool(()=>({}));
+  function emit(x,y,opts={}){
+    const p=pool.spawn();
+    p.x=x; p.y=y;
+    p.vx=opts.vx ?? rand(-60,60);
+    p.vy=opts.vy ?? rand(-120,-10);
+    p.g = opts.g ?? 380;
+    p.life=p.maxLife=opts.life ?? rand(0.4,0.9);
+    p.size=opts.size ?? rand(2,5);
+    p.color=opts.color || [255,255,255];
+    p.shape=opts.shape || 'circle';     // circle | square | spark | smoke
+    p.glow=opts.glow ?? true;
+    p.spin=opts.spin ?? rand(-6,6); p.rot=0;
+    p.drag=opts.drag ?? 1;
+    return p;
+  }
+  // Helpers de alto nivel
+  function burst(x,y,n,o){ for(let i=0;i<n;i++) emit(x,y,o); }
+  function update(dt){
+    for(const p of pool.active){
+      p.life-=dt; if(p.life<=0){ p.dead=true; continue; }
+      p.vx*=Math.pow(p.drag,dt*60/60); p.vy+=p.g*dt;
+      p.x+=p.vx*dt; p.y+=p.vy*dt; p.rot+=p.spin*dt;
+    }
+    pool.sweep();
+  }
+  function draw(ctx){
+    for(const p of pool.active){
+      const t=p.life/p.maxLife, a=clamp(t,0,1);
+      ctx.save();
+      if(p.glow){ ctx.shadowBlur=12; ctx.shadowColor=rgba(p.color,a*0.8); }
+      ctx.globalAlpha=a;
+      ctx.fillStyle=rgba(p.color, a);
+      if(p.shape==='circle'){
+        ctx.beginPath(); ctx.arc(p.x,p.y,p.size*(0.4+t*0.6),0,TAU); ctx.fill();
+      }else if(p.shape==='square'){
+        ctx.translate(p.x,p.y); ctx.rotate(p.rot);
+        ctx.fillRect(-p.size/2,-p.size/2,p.size,p.size);
+      }else if(p.shape==='spark'){
+        ctx.strokeStyle=rgba(p.color,a); ctx.lineWidth=p.size*0.6;
+        ctx.beginPath(); ctx.moveTo(p.x,p.y); ctx.lineTo(p.x-p.vx*0.03,p.y-p.vy*0.03); ctx.stroke();
+      }else if(p.shape==='smoke'){
+        ctx.globalAlpha=a*0.4;
+        ctx.beginPath(); ctx.arc(p.x,p.y,p.size*(1.5-t),0,TAU); ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+  function clear(){ pool.clear(); }
+  return { emit, burst, update, draw, clear, get count(){return pool.active.length;} };
+})();
+
+/* ─────────────────────────────────────────────────────────────────────────
+   6) BIOMAS — 9 mundos con paleta, clima y decoración propias.
+   Cada bioma define colores de cielo (arriba/abajo), montañas lejanas,
+   colinas medias, suelo, niebla, acento (glow) y tipo de clima.
+   ───────────────────────────────────────────────────────────────────────── */
+const BIOMES = [
+  { name:'VOLCÁN ACTIVO', skyTop:[60,14,18], skyBot:[160,52,28], far:[40,20,26], mid:[70,28,28],
+    ground:[34,18,20], accent:[255,120,40], fog:[120,40,20], weather:'ash', glow:[255,90,30] },
+  { name:'MONTAÑAS NEVADAS', skyTop:[120,160,210], skyBot:[210,230,245], far:[150,170,200], mid:[200,215,235],
+    ground:[225,235,245], accent:[120,180,255], fog:[220,235,250], weather:'snow', glow:[180,220,255] },
+  { name:'TORMENTA ELÉCTRICA', skyTop:[18,20,40], skyBot:[44,46,78], far:[26,28,52], mid:[40,42,70],
+    ground:[24,26,42], accent:[160,180,255], fog:[60,64,110], weather:'storm', glow:[150,170,255] },
+  { name:'LLUVIA INTENSA', skyTop:[28,40,56], skyBot:[60,82,104], far:[40,58,74], mid:[52,74,92],
+    ground:[34,46,56], accent:[120,200,255], fog:[90,120,150], weather:'rain', glow:[120,200,255] },
+  { name:'DESIERTO DE ARENA', skyTop:[210,150,70], skyBot:[240,205,130], far:[200,150,90], mid:[222,182,118],
+    ground:[214,170,100], accent:[255,210,120], fog:[230,195,130], weather:'sand', glow:[255,200,110] },
+  { name:'BOSQUE OSCURO', skyTop:[14,26,22], skyBot:[26,46,38], far:[18,34,28], mid:[26,50,40],
+    ground:[20,32,26], accent:[80,255,160], fog:[30,60,48], weather:'fog', glow:[80,255,160] },
+  { name:'CIUDAD NEÓN', skyTop:[20,8,40], skyBot:[50,16,80], far:[34,12,60], mid:[60,20,96],
+    ground:[18,10,30], accent:[255,40,210], fog:[80,30,120], weather:'neon', glow:[0,240,255] },
+  { name:'CUEVA DE CRISTAL', skyTop:[10,16,34], skyBot:[24,38,70], far:[20,32,60], mid:[34,52,90],
+    ground:[16,24,46], accent:[120,255,240], fog:[40,70,110], weather:'crystal', glow:[140,255,240] },
+  { name:'MUNDO APOCALÍPTICO', skyTop:[44,30,28], skyBot:[96,60,46], far:[54,38,34], mid:[74,50,42],
+    ground:[40,30,28], accent:[255,140,60], fog:[110,70,50], weather:'ash', glow:[255,120,50] },
+];
+
+/* Estado de bioma con transición suave (lerp de paletas). */
+const Biome = {
+  index:0, next:0, t:1, // t=1 → totalmente en `index`
+  get cur(){ return BIOMES[this.index]; },
+  get nxt(){ return BIOMES[this.next]; },
+  // Devuelve color interpolado entre bioma actual y siguiente
+  C(key){ const a=BIOMES[this.index][key], b=BIOMES[this.next][key];
+           return [lerp(a[0],b[0],this.t), lerp(a[1],b[1],this.t), lerp(a[2],b[2],this.t)]; },
+  weather(){ return this.t<0.5 ? BIOMES[this.index].weather : BIOMES[this.next].weather; },
+  start(i){ this.index=i; this.next=i; this.t=1; },
+  to(i){ if(i===this.next) return; this.index=this.next; this.next=i; this.t=0; UI.showBiome(BIOMES[i].name, BIOMES[i].glow); Audio.sfx.biome(); },
+  update(dt){ if(this.t<1){ this.t=clamp(this.t+dt*0.4,0,1); if(this.t>=1) this.index=this.next; } }
+};
+
+/* ─────────────────────────────────────────────────────────────────────────
+   7) PARALLAX + CLIMA
+   - Capas de profundidad generadas proceduralmente (siluetas estables).
+   - Clima por bioma: ceniza, nieve, lluvia, tormenta, arena, niebla, neón...
+   - Ciclo día/noche que modula un overlay de oscuridad.
+   ───────────────────────────────────────────────────────────────────────── */
+const World = {
+  scroll:0,           // desplazamiento horizontal acumulado (px)
+  dayPhase:0,         // 0..1 ciclo día/noche
+  lightning:0,        // 0..1 destello de rayo
+  lightningTimer:rand(3,8),
+  reset(){ this.scroll=0; this.dayPhase=0.15; this.lightning=0; this.lightningTimer=rand(3,8); },
+
+  update(dt, speed){
+    this.scroll += speed*dt;
+    this.dayPhase = (this.dayPhase + dt*0.012) % 1; // ciclo lento día/noche
+    // Rayos en biomas con tormenta
+    const w=Biome.weather();
+    if(w==='storm'||w==='rain'){
+      this.lightningTimer-=dt;
+      if(this.lightningTimer<=0){ this.lightning=1; this.lightningTimer=rand(2.5,7); if(w==='storm'){ Audio.sfx.land(); } }
+    }
+    this.lightning=Math.max(0,this.lightning-dt*2.6);
+  },
+
+  /** Factor de oscuridad nocturna 0..1 (0 = pleno día). */
+  night(){ return (Math.sin((this.dayPhase-0.25)*TAU)*0.5+0.5); },
+
+  // --- DIBUJO DEL FONDO COMPLETO ---
+  draw(ctx,W,H){
+    const night=this.night();
+    // 1) Cielo (gradiente con tinte nocturno)
+    const top=Biome.C('skyTop'), bot=Biome.C('skyBot');
+    const tnT=mix(top,[6,8,22],night*0.75), tnB=mix(bot,[10,12,30],night*0.6);
+    const g=ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,tnT); g.addColorStop(1,tnB);
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+
+    // 2) Sol / luna según ciclo
+    this._drawCelestial(ctx,W,H,night);
+
+    // 3) Estrellas de noche
+    if(night>0.45) this._drawStars(ctx,W,H,(night-0.45)/0.55);
+
+    const groundY=Game.groundY;
+
+    // 4) Capas parallax (lejana → cercana)
+    this._mountains(ctx,W,groundY, this.scroll*0.12, groundY*0.42, Biome.C('far'), night, 0.6);
+    this._mountains(ctx,W,groundY, this.scroll*0.28, groundY*0.62, Biome.C('mid'), night, 0.85);
+    this._silhouettes(ctx,W,groundY, this.scroll*0.5, night); // árboles/edificios según bioma
+
+    // 5) Suelo
+    this._ground(ctx,W,H,groundY,night);
+
+    // 6) Niebla volumétrica
+    this._fog(ctx,W,groundY,night);
+  },
+
+  _drawCelestial(ctx,W,H,night){
+    const ang=(this.dayPhase)*TAU;
+    const cx=W*0.5 + Math.cos(ang-Math.PI/2)*W*0.42;
+    const cy=H*0.55 + Math.sin(ang-Math.PI/2)*H*0.48;
+    const isSun=night<0.5;
+    const r=isSun?42:30;
+    ctx.save(); ctx.globalAlpha=clamp(isSun?1-night*1.4:night*1.2,0,1);
+    ctx.shadowBlur=60; ctx.shadowColor=isSun?'rgba(255,210,120,.9)':'rgba(200,220,255,.8)';
+    ctx.fillStyle=isSun?'#ffdf8a':'#dfe9ff';
+    ctx.beginPath(); ctx.arc(cx,cy,r,0,TAU); ctx.fill();
+    ctx.restore();
+  },
+  _starCache:null,
+  _drawStars(ctx,W,H,a){
+    if(!this._starCache){ this._starCache=[]; for(let i=0;i<90;i++) this._starCache.push([Math.random(),Math.random()*0.6,rand(0.6,1.8),rand(0,TAU)]); }
+    ctx.save(); ctx.fillStyle='#fff';
+    for(const s of this._starCache){
+      const tw=0.5+0.5*Math.sin(performance.now()*0.002+s[3]);
+      ctx.globalAlpha=a*tw*0.9;
+      ctx.beginPath(); ctx.arc(s[0]*W,s[1]*H,s[2],0,TAU); ctx.fill();
+    }
+    ctx.restore();
+  },
+
+  // Cadena de montañas (triángulos suaves) con ruido determinista
+  _mountains(ctx,W,groundY,offset,height,col,night,opacity){
+    const color=mix(col,[8,10,24],night*0.6);
+    ctx.save(); ctx.globalAlpha=opacity; ctx.fillStyle=color;
+    ctx.beginPath(); ctx.moveTo(0,groundY);
+    const seg=70, n=Math.ceil(W/seg)+2;
+    for(let i=0;i<=n;i++){
+      const x=i*seg - (offset%seg);
+      const k=Math.floor((offset/seg)+i);
+      const h=height*(0.45+0.55*hashNoise(k*0.7));
+      ctx.lineTo(x, groundY-h);
+    }
+    ctx.lineTo(W,groundY); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  },
+
+  // Siluetas cercanas dependientes del bioma (árboles, cactus, edificios neón…)
+  _silhouettes(ctx,W,groundY,offset,night){
+    const w=Biome.weather(); const col=mix(Biome.C('mid'),[4,6,16],0.4+night*0.4);
+    const seg=160, n=Math.ceil(W/seg)+2;
+    ctx.save();
+    for(let i=0;i<=n;i++){
+      const x=i*seg-(offset%seg); const k=Math.floor((offset/seg)+i);
+      const r=hashNoise(k*3.3);
+      const baseH=70+r*90;
+      if(w==='neon'){ // edificios con ventanas
+        ctx.fillStyle=col; ctx.fillRect(x,groundY-baseH,60,baseH);
+        ctx.fillStyle=rgba(Biome.C('accent'),0.7);
+        for(let wy=groundY-baseH+10; wy<groundY-10; wy+=18)
+          for(let wx=x+8; wx<x+52; wx+=16)
+            if(hashNoise(wx*wy*0.001)>0.4){ ctx.globalAlpha=0.5+0.5*hashNoise(wx+wy); ctx.fillRect(wx,wy,7,9); }
+        ctx.globalAlpha=1;
+      } else if(w==='snow'||w==='storm'||w==='rain'){ // pinos
+        ctx.fillStyle=col;
+        const px=x+30;
+        ctx.beginPath(); ctx.moveTo(px,groundY-baseH); ctx.lineTo(px-28,groundY); ctx.lineTo(px+28,groundY); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(px,groundY-baseH+30); ctx.lineTo(px-34,groundY-20); ctx.lineTo(px+34,groundY-20); ctx.closePath(); ctx.fill();
+      } else if(w==='sand'){ // cactus / dunas
+        ctx.fillStyle=col; ctx.fillRect(x+24,groundY-baseH*0.7,14,baseH*0.7);
+        ctx.fillRect(x+12,groundY-baseH*0.5,10,26); ctx.fillRect(x+40,groundY-baseH*0.55,10,26);
+      } else { // rocas/árboles oscuros genéricos
+        ctx.fillStyle=col;
+        ctx.beginPath(); ctx.ellipse(x+30,groundY-baseH*0.4,40,baseH*0.5,0,Math.PI,0); ctx.fill();
+        ctx.fillRect(x+26,groundY-baseH*0.4,8,baseH*0.4);
+      }
+    }
+    ctx.restore();
+  },
+
+  _ground(ctx,W,H,groundY,night){
+    const gc=mix(Biome.C('ground'),[6,8,18],night*0.55);
+    ctx.fillStyle=gc; ctx.fillRect(0,groundY,W,H-groundY);
+    // Línea de borde con glow del acento
+    ctx.save(); ctx.shadowBlur=18; ctx.shadowColor=rgba(Biome.C('glow'),0.6);
+    ctx.strokeStyle=rgba(Biome.C('accent'),0.55); ctx.lineWidth=3;
+    ctx.beginPath(); ctx.moveTo(0,groundY); ctx.lineTo(W,groundY); ctx.stroke();
+    ctx.restore();
+    // Textura de suelo en movimiento (líneas de velocidad)
+    ctx.save(); ctx.strokeStyle=rgba(Biome.C('accent'),0.12); ctx.lineWidth=2;
+    const seg=46, off=this.scroll% seg;
+    for(let x=-off;x<W;x+=seg){ ctx.beginPath(); ctx.moveTo(x,groundY+14); ctx.lineTo(x+seg*0.5,H); ctx.stroke(); }
+    ctx.restore();
+  },
+
+  _fog(ctx,W,groundY,night){
+    const fc=Biome.C('fog'); const dens = Biome.weather()==='fog'?0.5:0.18;
+    const g=ctx.createLinearGradient(0,groundY-120,0,groundY+40);
+    g.addColorStop(0,rgba(fc,0)); g.addColorStop(1,rgba(fc,dens+night*0.12));
+    ctx.fillStyle=g; ctx.fillRect(0,groundY-120,W,160);
+  },
+
+  /** Capa climática que se dibuja por encima de los obstáculos. */
+  drawWeather(ctx,W,H){
+    const w=Biome.weather();
+    if(this.lightning>0.05){
+      ctx.fillStyle=`rgba(200,210,255,${this.lightning*0.4})`; ctx.fillRect(0,0,W,H);
+      if(this.lightning>0.7) this._bolt(ctx,W,H);
+    }
+    if(w==='neon'){ // neblina de color
+      ctx.fillStyle=rgba(Biome.C('glow'),0.05); ctx.fillRect(0,0,W,H);
+    }
+  },
+  _bolt(ctx,W,H){
+    ctx.save(); ctx.strokeStyle='rgba(220,230,255,.9)'; ctx.lineWidth=3;
+    ctx.shadowBlur=20; ctx.shadowColor='#fff';
+    let x=rand(W*0.2,W*0.8), y=0; ctx.beginPath(); ctx.moveTo(x,y);
+    while(y<Game.groundY){ y+=rand(20,50); x+=rand(-40,40); ctx.lineTo(x,y); }
+    ctx.stroke(); ctx.restore();
+  },
+
+  /** Emite partículas climáticas (ceniza, nieve, lluvia, arena). */
+  emitWeather(dt,W,speed){
+    const w=Biome.weather();
+    const rate = {ash:18,snow:16,rain:42,storm:46,sand:30,fog:4,crystal:6,neon:6}[w]||0;
+    // Emisión estocástica: parte entera siempre + parte decimal como probabilidad
+    const count = Math.floor(rate*dt) + (Math.random()<(rate*dt%1)?1:0);
+    for(let i=0;i<count;i++){
+      const x=rand(0,W);
+      if(w==='ash')  Particles.emit(x,-10,{vx:rand(-20,20),vy:rand(20,60),g:6,life:rand(2,4),size:rand(2,4),color:[255,140,60],shape:'circle',glow:true,drag:1});
+      else if(w==='snow') Particles.emit(x,-10,{vx:rand(-30,30),vy:rand(40,90),g:4,life:rand(2,4),size:rand(2,5),color:[235,245,255],shape:'circle',glow:false,drag:1});
+      else if(w==='rain'||w==='storm') Particles.emit(x,-10,{vx:-speed*0.18,vy:rand(700,950),g:0,life:rand(0.4,0.8),size:rand(2,3),color:[150,200,255],shape:'spark',glow:false,drag:1});
+      else if(w==='sand') Particles.emit(-10,rand(0,Game.groundY),{vx:rand(180,360)+speed*0.3,vy:rand(-20,40),g:10,life:rand(0.8,1.6),size:rand(1,3),color:[235,200,130],shape:'circle',glow:false,drag:1});
+      else if(w==='fog')  Particles.emit(rand(0,W),rand(Game.groundY-160,Game.groundY),{vx:-speed*0.1,vy:rand(-6,6),g:0,life:rand(1.5,3),size:rand(40,90),color:Biome.C('fog'),shape:'smoke',glow:false,drag:1});
+      else if(w==='crystal') Particles.emit(x,rand(0,Game.groundY),{vx:0,vy:rand(-4,4),g:0,life:rand(1.5,3),size:rand(1,3),color:[150,255,240],shape:'circle',glow:true,drag:1});
+      else if(w==='neon') Particles.emit(x,Game.groundY,{vx:rand(-10,10),vy:rand(-40,-90),g:-4,life:rand(1.5,3),size:rand(1,3),color:Biome.C('glow'),shape:'circle',glow:true,drag:1});
+    }
+  }
+};
+
+/* ─────────────────────────────────────────────────────────────────────────
+   8) JUGADOR — física + animación procedural (dino estilizado).
+   ───────────────────────────────────────────────────────────────────────── */
+const Player = {
+  x:0, y:0, vy:0, w:46, h:64, baseH:64, duckH:38,
+  onGround:true, ducking:false, jumps:0, maxJumps:2,
+  coyote:0, runCycle:0, dead:false,
+  shield:0, magnet:0, scoreX2:0, // temporizadores de power-ups (s)
+  trail:[],
+
+  reset(){
+    const s=Game.scale;
+    this.w=46*s; this.baseH=64*s; this.duckH=38*s; this.h=this.baseH;
+    this.x=Game.W*0.18; this.y=Game.groundY-this.h; this.vy=0;
+    this.onGround=true; this.ducking=false; this.jumps=0; this.coyote=0;
+    this.runCycle=0; this.dead=false; this.shield=0; this.magnet=0; this.scoreX2=0;
+    this.trail.length=0;
+  },
+
+  jump(){
+    const s=Game.scale;
+    if(this.onGround||this.coyote>0){
+      this.vy=-940*s; this.onGround=false; this.coyote=0; this.jumps=1;
+      Audio.sfx.jump();
+      this._jumpFX();
+    } else if(this.jumps<this.maxJumps){ // doble salto
+      this.vy=-820*s; this.jumps++;
+      Audio.sfx.dblJump();
+      this._jumpFX(true);
+    }
+  },
+  _jumpFX(dbl){
+    const cx=this.x+this.w/2, cy=this.y+this.h;
+    Particles.burst(cx,cy,dbl?14:10,{vy:()=>0, color:Biome.C('glow'), shape:'circle', size:dbl?4:3, life:0.5,
+      vx:rand(-160,160), g:300, glow:true});
+    for(let i=0;i<8;i++) Particles.emit(cx,cy,{vx:rand(-180,180),vy:rand(-40,-200),g:500,color:dbl?[255,80,210]:Biome.C('accent'),size:rand(2,4),life:0.5});
+  },
+
+  update(dt){
+    const s=Game.scale, g=2300*s;
+    // Salto con buffer + coyote-time
+    if(Input.consumeJump()) this.jump();
+    if(this.onGround) this.coyote=0.08; else this.coyote=Math.max(0,this.coyote-dt);
+
+    // Corte de salto variable (suelta tecla = sube menos)
+    if(!Input.jumpHeld && this.vy<0) this.vy*=Math.pow(0.06,dt);
+
+    // Agacharse solo en el suelo (en el aire = caída rápida)
+    this.ducking = Input.duckHeld;
+    if(this.ducking && !this.onGround){ this.vy += g*0.9*dt; }
+
+    // Física vertical
+    this.vy += g*dt;
+    this.y  += this.vy*dt;
+
+    // Altura objetivo (agachado o normal) con interpolación suave
+    const targetH = (this.ducking&&this.onGround)? this.duckH : this.baseH;
+    this.h = lerp(this.h, targetH, clamp(dt*18,0,1));
+
+    // Colisión con el suelo
+    const floor=Game.groundY-this.h;
+    if(this.y>=floor){
+      if(!this.onGround && this.vy>120*s){ Audio.sfx.land(); this._landFX(); }
+      this.y=floor; this.vy=0; this.onGround=true; this.jumps=0;
+    } else this.onGround=false;
+
+    // Ciclo de carrera
+    if(this.onGround) this.runCycle += dt*Math.min(20, 9+Game.speed/60);
+
+    // Temporizadores de power-ups
+    this.shield=Math.max(0,this.shield-dt);
+    this.magnet=Math.max(0,this.magnet-dt);
+    this.scoreX2=Math.max(0,this.scoreX2-dt);
+
+    // Estela de movimiento (motion blur)
+    this.trail.unshift({x:this.x,y:this.y,h:this.h});
+    if(this.trail.length>6) this.trail.pop();
+
+    // Partículas de polvo al correr
+    if(this.onGround && Math.random()<0.5){
+      Particles.emit(this.x+4, this.y+this.h, {vx:rand(-90,-30)-Game.speed*0.15, vy:rand(-30,-80), g:300, color:Biome.C('ground').map(c=>c+40), size:rand(2,4), life:0.5, glow:false});
+    }
+  },
+
+  _landFX(){
+    const cy=this.y+this.h;
+    Particles.burst(this.x+this.w/2,cy,12,{vx:rand(-200,200),vy:rand(-10,-90),g:500,color:Biome.C('ground').map(c=>c+50),size:rand(2,5),life:0.5,glow:false});
+  },
+
+  /** Caja de colisión (algo más pequeña que el sprite = colisiones justas). */
+  box(){
+    const pad=this.w*0.18;
+    return { x:this.x+pad, y:this.y+this.h*0.06, w:this.w-pad*2, h:this.h*0.9 };
+  },
+
+  draw(ctx){
+    const s=Game.scale;
+    // Estela (motion blur) cuando hay turbo o velocidad alta
+    if(Game.turbo>0 || Game.speed>620*s){
+      for(let i=this.trail.length-1;i>0;i--){
+        const tr=this.trail[i]; ctx.globalAlpha=0.12*(1-i/this.trail.length);
+        this._body(ctx, tr.x, tr.y, tr.h, true);
+      }
+      ctx.globalAlpha=1;
+    }
+    // Aura de escudo
+    if(this.shield>0){
+      ctx.save(); ctx.globalAlpha=0.35+0.25*Math.sin(performance.now()*0.01);
+      ctx.shadowBlur=24; ctx.shadowColor='#5cffb1'; ctx.strokeStyle='#5cffb1'; ctx.lineWidth=3;
+      ctx.beginPath(); ctx.ellipse(this.x+this.w/2,this.y+this.h/2,this.w*0.9,this.h*0.75,0,0,TAU); ctx.stroke();
+      ctx.restore();
+    }
+    this._body(ctx, this.x, this.y, this.h, false);
+  },
+
+  // Dibuja el cuerpo del corredor de forma procedural (sin imágenes)
+  _body(ctx,x,y,h,ghost){
+    const s=Game.scale, w=this.w, glow=Biome.C('glow');
+    const cx=x+w/2;
+    ctx.save();
+    if(!ghost){ ctx.shadowBlur=18; ctx.shadowColor=rgba(glow,0.7); }
+    // Color del personaje (con tinte por power-ups)
+    let main=[90,230,255];
+    if(Game.turbo>0) main=[255,120,40];
+    else if(this.scoreX2>0) main=[255,210,80];
+    const grad=ctx.createLinearGradient(x,y,x,y+h);
+    grad.addColorStop(0, rgba(main,1)); grad.addColorStop(1, rgba(main.map(c=>c*0.55),1));
+    ctx.fillStyle=grad;
+
+    // Cuerpo (cápsula)
+    const bodyTop=y+h*0.18, bodyH=h*0.62, bw=w*0.78;
+    rr(ctx, cx-bw/2, bodyTop, bw, bodyH, w*0.28); ctx.fill();
+    // Cola
+    ctx.beginPath(); ctx.moveTo(cx-bw/2, bodyTop+bodyH*0.3);
+    ctx.quadraticCurveTo(x-w*0.4, bodyTop+bodyH*0.1, x-w*0.35, bodyTop-h*0.05);
+    ctx.lineTo(x-w*0.05, bodyTop+bodyH*0.25); ctx.closePath(); ctx.fill();
+    // Cabeza
+    const hx=cx+bw*0.28, hy=y+h*0.12;
+    rr(ctx, hx-w*0.05, hy, w*0.5, h*0.3, w*0.2); ctx.fill();
+    // Ojo
+    if(!ghost){
+      ctx.fillStyle='#04121a'; ctx.beginPath(); ctx.arc(hx+w*0.28, hy+h*0.1, w*0.06, 0, TAU); ctx.fill();
+      ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(hx+w*0.30, hy+h*0.08, w*0.025, 0, TAU); ctx.fill();
+    }
+    // Patas animadas (ciclo de carrera)
+    ctx.fillStyle=rgba(main.map(c=>c*0.7),1);
+    const legY=bodyTop+bodyH-2, legH=h*0.22, sw=Math.sin(this.runCycle), sw2=Math.sin(this.runCycle+Math.PI);
+    const phase = this.onGround?1:0.3;
+    rr(ctx, cx-bw*0.22 + sw*8*s*phase, legY, w*0.16, legH*(0.7+0.3*Math.abs(sw)), 3); ctx.fill();
+    rr(ctx, cx+bw*0.06 + sw2*8*s*phase, legY, w*0.16, legH*(0.7+0.3*Math.abs(sw2)), 3); ctx.fill();
+    // Brillo dorsal
+    if(!ghost){ ctx.fillStyle=rgba([255,255,255],0.25); rr(ctx, cx-bw*0.3, bodyTop+3, bw*0.5, bodyH*0.18, 6); ctx.fill(); }
+    ctx.restore();
+  }
+};
+// Helper: rectángulo redondeado
+function rr(ctx,x,y,w,h,r){ r=Math.min(r,w/2,h/2); ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   9) ENTIDADES — obstáculos, monedas y power-ups (con pooling).
+   Tipos de obstáculo:
+     groundLow  → saltar
+     groundTall → saltar (alto)
+     flyer      → agacharse (vuela a la altura del torso)
+     gap        → saltar (zona de lava/abismo)
+   Subtipos visuales: rock, spike, lava, dino, robot, meteor, beast.
+   ───────────────────────────────────────────────────────────────────────── */
+const Obstacles = new Pool(()=>({}));
+const Coins     = new Pool(()=>({}));
+const Powerups  = new Pool(()=>({}));
+
+const PWR_TYPES=['shield','turbo','magnet','x2'];
+const PWR_META={
+  shield:{name:'ESCUDO', color:[92,255,177], icon:'shield'},
+  turbo :{name:'TURBO',  color:[255,120,40], icon:'bolt'},
+  magnet:{name:'IMÁN',   color:[120,200,255], icon:'magnet'},
+  x2    :{name:'PUNTOS X2',color:[255,211,77], icon:'x2'},
+};
+
+function spawnObstacle(kind, subtype){
+  const s=Game.scale, o=Obstacles.spawn();
+  o.kind=kind; o.sub=subtype; o.scored=false; o.near=false;
+  o.x=Game.W+60; o.t=0;
+  if(kind==='flyer'){
+    o.w=64*s; o.h=42*s; o.y=Game.groundY - Player.baseH - rand(8,40)*s; // a la altura del torso
+  } else if(kind==='groundTall'){
+    o.w=44*s; o.h=rand(80,110)*s; o.y=Game.groundY-o.h;
+  } else if(kind==='gap'){
+    o.w=rand(70,120)*s; o.h=30*s; o.y=Game.groundY-6*s; // lava baja: saltar
+  } else { // groundLow
+    o.w=rand(34,56)*s; o.h=rand(36,60)*s; o.y=Game.groundY-o.h;
+  }
+  return o;
+}
+function spawnCoin(x,y){ const c=Coins.spawn(); c.x=x; c.y=y; c.r=12*Game.scale; c.t=rand(0,TAU); c.dead=false; return c; }
+function spawnPowerup(x,y){ const p=Powerups.spawn(); p.x=x; p.y=y; p.r=18*Game.scale; p.type=pick(PWR_TYPES); p.t=0; p.dead=false; return p; }
+
+/* Dibujo de cada subtipo de obstáculo (procedural). */
+function drawObstacle(ctx,o){
+  const s=Game.scale, glow=Biome.C('glow');
+  ctx.save();
+  const x=o.x, y=o.y, w=o.w, h=o.h;
+  if(o.sub==='lava'||o.kind==='gap'){
+    // Charco de lava con burbujas y glow
+    ctx.shadowBlur=24; ctx.shadowColor='rgba(255,120,30,.9)';
+    const g=ctx.createLinearGradient(0,y,0,y+h); g.addColorStop(0,'#ffcf5a'); g.addColorStop(1,'#ff3b1e');
+    ctx.fillStyle=g; rr(ctx,x,y,w,h,6); ctx.fill();
+    ctx.fillStyle='rgba(255,220,120,.8)';
+    for(let i=0;i<3;i++){ const bx=x+w*(0.2+i*0.3); const by=y - (Math.sin(o.t*4+i)*6+4); ctx.beginPath(); ctx.arc(bx,by,3*s,0,TAU); ctx.fill(); }
+    if(Math.random()<0.3) Particles.emit(x+rand(0,w), y, {vx:rand(-20,20),vy:rand(-60,-160),g:200,color:[255,120,30],size:rand(2,4),life:0.6});
+  } else if(o.sub==='spike'){
+    ctx.shadowBlur=12; ctx.shadowColor=rgba(glow,0.6); ctx.fillStyle='#cfd6e0';
+    const n=Math.max(2,Math.floor(w/(12*s)));
+    ctx.beginPath(); ctx.moveTo(x,y+h);
+    for(let i=0;i<n;i++){ ctx.lineTo(x+(i+0.5)*w/n, y); ctx.lineTo(x+(i+1)*w/n, y+h); }
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.3)'; ctx.fillRect(x,y+h-3,w,3);
+  } else if(o.sub==='robot'){
+    ctx.shadowBlur=16; ctx.shadowColor='rgba(120,200,255,.8)';
+    ctx.fillStyle='#3a4a66'; rr(ctx,x,y,w,h,6); ctx.fill();
+    ctx.fillStyle='#8fd0ff'; ctx.fillRect(x+w*0.2, y+h*0.2, w*0.6, h*0.18); // visor
+    ctx.fillStyle='#aef'; const ex=x+w*0.5+Math.sin(o.t*5)*w*0.15; ctx.fillRect(ex,y+h*0.22,w*0.12,h*0.12);
+    ctx.fillStyle='#2a3650'; ctx.fillRect(x+w*0.15,y+h, w*0.2, 6*s); ctx.fillRect(x+w*0.65,y+h, w*0.2, 6*s);
+  } else if(o.sub==='dino'){
+    ctx.shadowBlur=14; ctx.shadowColor='rgba(255,90,108,.7)';
+    ctx.fillStyle='#c0455a'; rr(ctx,x,y+h*0.2,w*0.8,h*0.6,8); ctx.fill();
+    rr(ctx,x+w*0.45,y,w*0.5,h*0.4,6); ctx.fill(); // cabeza
+    ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(x+w*0.8,y+h*0.16,3*s,0,TAU); ctx.fill();
+    // dientes
+    ctx.fillStyle='#fff'; for(let i=0;i<3;i++) ctx.fillRect(x+w*0.6+i*5*s, y+h*0.3, 3*s,4*s);
+    ctx.fillStyle='#a03548'; const lp=Math.sin(o.t*10)*4*s; ctx.fillRect(x+w*0.2,y+h*0.8,w*0.14,h*0.2+lp); ctx.fillRect(x+w*0.5,y+h*0.8,w*0.14,h*0.2-lp);
+  } else if(o.sub==='meteor'){
+    ctx.shadowBlur=22; ctx.shadowColor='rgba(255,140,40,.9)';
+    ctx.fillStyle='#5a3a2a'; ctx.beginPath(); ctx.arc(x+w/2,y+h/2,w/2,0,TAU); ctx.fill();
+    ctx.fillStyle='#3a241a'; ctx.beginPath(); ctx.arc(x+w*0.35,y+h*0.4,w*0.12,0,TAU); ctx.fill();
+    // estela de fuego
+    ctx.fillStyle='rgba(255,150,40,.6)';
+    ctx.beginPath(); ctx.moveTo(x+w,y); ctx.lineTo(x+w+40*s,y-26*s); ctx.lineTo(x+w*0.7,y+h*0.5); ctx.closePath(); ctx.fill();
+    if(Math.random()<0.6) Particles.emit(x+w*0.7,y+h*0.4,{vx:rand(40,120),vy:rand(-40,-10),g:0,color:[255,140,40],size:rand(2,5),life:0.5});
+  } else if(o.sub==='beast'){
+    ctx.shadowBlur=18; ctx.shadowColor='rgba(160,80,255,.7)';
+    ctx.fillStyle='#5b3a8c'; rr(ctx,x,y,w,h,10); ctx.fill();
+    ctx.fillStyle='#d6b8ff'; // ojos
+    ctx.beginPath(); ctx.arc(x+w*0.3,y+h*0.3,4*s,0,TAU); ctx.arc(x+w*0.7,y+h*0.3,4*s,0,TAU); ctx.fill();
+    ctx.strokeStyle='#3a2360'; ctx.lineWidth=2*s; // dientes
+    for(let i=0;i<4;i++){ ctx.beginPath(); ctx.moveTo(x+w*(0.2+i*0.2), y+h*0.6); ctx.lineTo(x+w*(0.25+i*0.2), y+h*0.78); ctx.stroke(); }
+  } else { // rock (por defecto)
+    ctx.shadowBlur=10; ctx.shadowColor='rgba(0,0,0,.4)';
+    const rockC=Biome.C('mid').map(c=>c+30);
+    ctx.fillStyle=rgba(rockC,1);
+    ctx.beginPath();
+    ctx.moveTo(x, y+h);
+    ctx.lineTo(x+w*0.15, y+h*0.3); ctx.lineTo(x+w*0.5, y);
+    ctx.lineTo(x+w*0.85, y+h*0.4); ctx.lineTo(x+w, y+h);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.12)'; ctx.beginPath();
+    ctx.moveTo(x+w*0.5,y); ctx.lineTo(x+w*0.6,y+h*0.4); ctx.lineTo(x+w*0.35,y+h*0.4); ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawCoin(ctx,c){
+  const r=c.r*(0.8+0.2*Math.sin(c.t*4));
+  ctx.save(); ctx.translate(c.x,c.y);
+  ctx.shadowBlur=16; ctx.shadowColor='rgba(255,211,77,.9)';
+  const sx=Math.cos(c.t*3); // efecto de giro 3D
+  ctx.scale(Math.abs(sx)*0.8+0.2,1);
+  const g=ctx.createRadialGradient(0,0,2,0,0,r); g.addColorStop(0,'#fff6c8'); g.addColorStop(0.6,'#ffd34d'); g.addColorStop(1,'#e0a020');
+  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(0,0,r,0,TAU); ctx.fill();
+  ctx.fillStyle='#b8801a'; ctx.font=`bold ${r}px sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('$',0,1);
+  ctx.restore();
+}
+
+function drawPowerup(ctx,p){
+  const m=PWR_META[p.type], r=p.r*(1+0.08*Math.sin(p.t*4));
+  ctx.save(); ctx.translate(p.x, p.y+Math.sin(p.t*2)*4);
+  ctx.shadowBlur=22; ctx.shadowColor=rgba(m.color,0.9);
+  // rombo brillante
+  ctx.rotate(p.t*0.6); ctx.fillStyle=rgba(m.color,0.95);
+  ctx.beginPath(); ctx.moveTo(0,-r); ctx.lineTo(r,0); ctx.lineTo(0,r); ctx.lineTo(-r,0); ctx.closePath(); ctx.fill();
+  ctx.rotate(-p.t*0.6);
+  // icono
+  ctx.fillStyle='#04121a'; ctx.font=`bold ${r*0.9}px sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText({shield:'🛡',bolt:'⚡',magnet:'🧲',x2:'2x'}[m.icon]||'★', 0, 1);
+  ctx.restore();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   10) GENERADOR PROCEDURAL — decide qué aparece según la dificultad.
+   - Aumenta tipos de obstáculo y reduce el "hueco" entre ellos con el tiempo.
+   - Garantiza un hueco mínimo jugable (escala con la velocidad).
+   ───────────────────────────────────────────────────────────────────────── */
+const Spawner = {
+  nextDist:0, coinTimer:0, pwrTimer:0,
+  reset(){ this.nextDist=Game.W*0.6; this.coinTimer=1.2; this.pwrTimer=rand(8,14); },
+
+  /** Subtipos disponibles según el bioma para dar variedad temática. */
+  subFor(kind){
+    const w=Biome.weather();
+    if(kind==='gap') return 'lava';
+    if(kind==='flyer'){
+      if(w==='ash') return 'meteor';
+      if(w==='neon'||w==='crystal') return 'robot';
+      return pick(['meteor','robot','beast']);
+    }
+    if(kind==='groundTall') return pick(['robot','dino','beast']);
+    // groundLow
+    if(w==='ash') return pick(['rock','lava','spike']);
+    if(w==='sand') return pick(['rock','spike']);
+    return pick(['rock','spike','dino']);
+  },
+
+  update(dt){
+    const s=Game.scale, diff=Game.difficulty(); // 0..1
+    // --- Obstáculos por distancia recorrida ---
+    if(World.scroll >= this.nextDist){
+      // Pesos: a más dificultad, más voladores y altos
+      const r=Math.random();
+      let kind;
+      if(r < 0.5 - diff*0.15) kind='groundLow';
+      else if(r < 0.7) kind='flyer';
+      else if(r < 0.85) kind='groundTall';
+      else kind='gap';
+      const o=spawnObstacle(kind, this.subFor(kind));
+
+      // A veces, combos de obstáculos (más difícil)
+      if(diff>0.4 && Math.random()<diff*0.4 && kind==='groundLow'){
+        const o2=spawnObstacle('groundLow', this.subFor('groundLow'));
+        o2.x = o.x + o.w + rand(60,120)*s;
+      }
+
+      // Hueco hasta el próximo: depende de velocidad + dificultad (siempre jugable)
+      const minGap = Game.speed*0.62 + 120*s;          // espacio para reaccionar
+      const maxGap = Game.speed*1.1 + 260*s;
+      this.nextDist = World.scroll + lerp(maxGap, minGap, diff) * rand(0.85,1.2);
+
+      // Suele acompañar con un arco de monedas saltable
+      if(Math.random()<0.6) this._coinArc(o);
+    }
+
+    // --- Monedas sueltas periódicas ---
+    this.coinTimer-=dt;
+    if(this.coinTimer<=0){
+      this.coinTimer=rand(0.8,1.8);
+      const y=Game.groundY - rand(40,180)*s;
+      spawnCoin(Game.W+40, y);
+    }
+
+    // --- Power-ups ocasionales ---
+    this.pwrTimer-=dt;
+    if(this.pwrTimer<=0){
+      this.pwrTimer=rand(12,20);
+      spawnPowerup(Game.W+60, Game.groundY - rand(70,160)*s);
+    }
+  },
+
+  // Arco de monedas que premia un salto bien ejecutado
+  _coinArc(o){
+    const s=Game.scale, n=5, cx=o.x+o.w*0.5, top=o.y-rand(50,90)*s;
+    for(let i=0;i<n;i++){
+      const t=i/(n-1), ang=Math.PI*t;
+      spawnCoin(cx-60*s+t*120*s, top - Math.sin(ang)*50*s);
+    }
+  }
+};
+
+/* ─────────────────────────────────────────────────────────────────────────
+   11) CÁMARA — shake e impulso cinematográfico.
+   ───────────────────────────────────────────────────────────────────────── */
+const Camera = {
+  shake:0, x:0, y:0,
+  kick(amt){ this.shake=Math.min(28,this.shake+amt); },
+  update(dt){
+    this.shake*=Math.pow(0.0008,dt); if(this.shake<0.3) this.shake=0;
+    this.x=rand(-this.shake,this.shake); this.y=rand(-this.shake,this.shake);
+  },
+  reset(){ this.shake=0; this.x=0; this.y=0; }
+};
+
+/* ─────────────────────────────────────────────────────────────────────────
+   12) INTERFAZ (DOM) — actualiza HUD y muestra/oculta pantallas.
+   ───────────────────────────────────────────────────────────────────────── */
+const $ = id=>document.getElementById(id);
+const UI = {
+  el:{}, _biomeTO:null, _comboTO:null,
+  init(){
+    ['scoreVal','distVal','coinVal','bestVal','comboWrap','comboMult','biomeTag',
+     'menu','pause','over','flash','pwrBar','pwrFill','pwrName',
+     'goScore','goDist','goCoins','goBest','newBest','touch'].forEach(id=>this.el[id]=$(id));
+  },
+  hud(){
+    this.el.scoreVal.textContent = Math.floor(Game.score).toLocaleString();
+    this.el.distVal.textContent  = Math.floor(Game.distance)+' m';
+    this.el.coinVal.textContent  = Game.coins;
+    this.el.bestVal.textContent  = Math.floor(Game.best).toLocaleString();
+    // Combo
+    if(Game.combo>1){
+      this.el.comboWrap.style.opacity='1';
+      this.el.comboMult.textContent='x'+Game.multiplier();
+    } else this.el.comboWrap.style.opacity='0';
+    // Barra de power-up
+    const pw=Game.activePower();
+    if(pw){
+      this.el.pwrBar.style.opacity='1'; this.el.pwrName.style.opacity='1';
+      this.el.pwrFill.style.width=(pw.t/pw.max*100)+'%';
+      this.el.pwrName.textContent=pw.name;
+      this.el.pwrFill.style.background=`linear-gradient(90deg, rgb(${pw.color}), #fff)`;
+    } else { this.el.pwrBar.style.opacity='0'; this.el.pwrName.style.opacity='0'; }
+  },
+  showBiome(name,glow){
+    const t=this.el.biomeTag; t.textContent=name; t.style.color=`rgb(${glow})`;
+    t.style.transition='none'; t.style.opacity='1'; t.style.transform='translate(-50%,-60%)';
+    void t.offsetWidth;
+    t.style.transition='opacity 1.6s ease, transform 1.6s ease';
+    t.style.opacity='0'; t.style.transform='translate(-50%,-50%)';
+  },
+  flash(a=0.6){ const f=this.el.flash; f.style.transition='none'; f.style.opacity=a; void f.offsetWidth;
+    f.style.transition='opacity .5s ease'; f.style.opacity='0'; },
+  comboPop(){ this.el.comboMult.animate([{transform:'scale(1.5)'},{transform:'scale(1)'}],{duration:250,easing:'ease-out'}); },
+  show(name){ ['menu','pause','over'].forEach(s=> this.el[s].classList.toggle('hidden', s!==name)); },
+  hideScreens(){ ['menu','pause','over'].forEach(s=> this.el[s].classList.add('hidden')); }
+};
+
+/* ─────────────────────────────────────────────────────────────────────────
+   13) JUEGO — máquina de estados + bucle principal.
+   Estados: 'menu' | 'play' | 'pause' | 'over'
+   ───────────────────────────────────────────────────────────────────────── */
+const Game = {
+  canvas:null, ctx:null, W:0, H:0, scale:1, groundY:0, dpr:1,
+  state:'menu', last:0, raf:null,
+  speed:0, baseSpeed:0, distance:0, score:0, coins:0, combo:0, best:0,
+  turbo:0, turboCool:0, elapsed:0,
+  miniEvent:null, miniTimer:0, eventCooldown:14,
+
+  init(){
+    this.canvas=$('game'); this.ctx=this.canvas.getContext('2d');
+    UI.init(); Input._bind(); this.resize();
+    addEventListener('resize', ()=>this.resize());
+    this.best = +localStorage.getItem('dino_odyssey_best') || 0;
+    UI.el.bestVal.textContent = Math.floor(this.best).toLocaleString();
+
+    // Mostrar controles táctiles en dispositivos con touch
+    if(matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window) UI.el.touch.classList.add('show');
+
+    this._wireButtons();
+    UI.show('menu');
+    this.last=performance.now();
+    this.loop=this.loop.bind(this);
+    this.raf=requestAnimationFrame(this.loop);
+  },
+
+  resize(){
+    this.dpr=Math.min(2, window.devicePixelRatio||1);
+    this.W=window.innerWidth; this.H=window.innerHeight;
+    this.canvas.width=this.W*this.dpr; this.canvas.height=this.H*this.dpr;
+    this.ctx.setTransform(this.dpr,0,0,this.dpr,0,0);
+    this.scale=clamp(this.H/720, 0.7, 1.6);
+    this.groundY=this.H*0.80;
+    if(this.state!=='play'){ Player.reset && Player.x!==undefined && (Player.x=this.W*0.18); }
+  },
+
+  _wireButtons(){
+    const start=()=>{ Audio.unlock(); this.startGame(); };
+    $('playBtn').onclick=start;
+    $('againBtn').onclick=start;
+    $('resumeBtn').onclick=()=>this.togglePause();
+    $('restartBtn2').onclick=start;
+    $('quitBtn').onclick=()=>this.toMenu();
+    $('menuBtn').onclick=()=>this.toMenu();
+    $('howBtn').onclick=()=>alert('CONTROLES\n\nSaltar: Espacio / Flecha Arriba / W / tocar pantalla\nAgacharse: Flecha Abajo / S / botón ▼\nDoble salto disponible.\n\nRecoge monedas y power-ups, encadena combos y sobrevive a la velocidad creciente.');
+    $('pauseBtn').onclick=()=>this.togglePause();
+    $('muteBtn').onclick=(e)=>{ const m=!Audio.muted; Audio.setMuted(m); e.currentTarget.innerHTML=m?'&#128263;':'&#128266;'; };
+  },
+
+  enterKey(){ if(this.state==='menu'||this.state==='over'){ Audio.unlock(); this.startGame(); } },
+
+  // ---- Transiciones de estado ----
+  startGame(){
+    UI.hideScreens();
+    this.state='play';
+    this.baseSpeed=420*this.scale; this.speed=this.baseSpeed;
+    this.distance=0; this.score=0; this.coins=0; this.combo=0; this.comboTimer=0;
+    this.turbo=0; this.turboCool=0; this.elapsed=0; this.miniEvent=null; this.miniTimer=0; this.eventCooldown=14;
+    World.reset(); Biome.start(0); Camera.reset();
+    Obstacles.clear(); Coins.clear(); Powerups.clear(); Particles.clear();
+    Player.reset(); Spawner.reset();
+    Audio.startMusic();
+    UI.showBiome(BIOMES[0].name, BIOMES[0].glow);
+  },
+  togglePause(){
+    if(this.state==='play'){ this.state='pause'; UI.show('pause'); Audio.stopMusic(); }
+    else if(this.state==='pause'){ this.state='play'; UI.hideScreens(); Audio.startMusic(); this.last=performance.now(); }
+  },
+  toMenu(){ this.state='menu'; UI.show('menu'); Audio.stopMusic(); },
+  gameOver(){
+    this.state='over'; Audio.stopMusic(); Audio.sfx.hit(); Camera.kick(26);
+    UI.flash(0.7);
+    // Explosión del jugador
+    Particles.burst(Player.x+Player.w/2, Player.y+Player.h/2, 40, {vx:rand(-360,360),vy:rand(-360,120),g:600,color:[255,90,80],size:rand(3,7),life:0.9});
+    const isBest = this.score>this.best;
+    if(isBest){ this.best=this.score; localStorage.setItem('dino_odyssey_best', Math.floor(this.best)); }
+    UI.el.newBest.style.display = isBest?'block':'none';
+    UI.el.goScore.textContent = Math.floor(this.score).toLocaleString();
+    UI.el.goDist.textContent  = Math.floor(this.distance);
+    UI.el.goCoins.textContent = this.coins;
+    UI.el.goBest.textContent  = Math.floor(this.best).toLocaleString();
+    setTimeout(()=>UI.show('over'), 700); // breve pausa dramática
+  },
+
+  // ---- Cálculos de dificultad / progreso ----
+  difficulty(){ return clamp(this.elapsed/120, 0, 1); },     // llega al máximo a los 2 min
+  multiplier(){ let m=1+Math.floor(this.combo/8); if(this.scoreXActive()) m*=2; if(this.turbo>0) m*=2; return Math.min(m,30); },
+  scoreXActive(){ return Player.scoreX2>0; },
+  activePower(){
+    if(this.turbo>0) return {name:'TURBO', t:this.turbo, max:5, color:PWR_META.turbo.color};
+    if(Player.shield>0) return {name:'ESCUDO', t:Player.shield, max:10, color:PWR_META.shield.color};
+    if(Player.scoreX2>0) return {name:'PUNTOS X2', t:Player.scoreX2, max:10, color:PWR_META.x2.color};
+    if(Player.magnet>0) return {name:'IMÁN', t:Player.magnet, max:10, color:PWR_META.magnet.color};
+    return null;
+  },
+
+  // ---- Eventos aleatorios (mini-eventos) ----
+  maybeEvent(dt){
+    this.eventCooldown-=dt;
+    if(this.miniEvent){ this.miniTimer-=dt; if(this.miniTimer<=0) this.miniEvent=null; return; }
+    if(this.eventCooldown<=0 && this.difficulty()>0.15){
+      this.eventCooldown=rand(16,26);
+      this.miniEvent=pick(['meteorShower','coinRush','quake']);
+      this.miniTimer=6;
+      if(this.miniEvent==='meteorShower') UI.showBiome('¡LLUVIA DE METEORITOS!', [255,140,40]);
+      if(this.miniEvent==='coinRush')     UI.showBiome('¡FIEBRE DE MONEDAS!', [255,211,77]);
+      if(this.miniEvent==='quake'){ UI.showBiome('¡TERREMOTO!', [255,90,80]); Camera.kick(14); }
+    }
+  },
+  applyEvent(dt){
+    if(this.miniEvent==='meteorShower' && Math.random()<dt*1.6){
+      const o=spawnObstacle('flyer','meteor'); o.y=-20; o.vyExtra=rand(200,360)*this.scale;
+    }
+    if(this.miniEvent==='coinRush' && Math.random()<dt*6){
+      spawnCoin(this.W+30, this.groundY-rand(40,200)*this.scale);
+    }
+    if(this.miniEvent==='quake'){ Camera.shake=Math.max(Camera.shake,5); }
+  },
+
+  // ---- Recogida y colisiones ----
+  collide(dt){
+    const pb=Player.box();
+    // Obstáculos
+    for(const o of Obstacles.active){
+      if(aabb(pb, o)){
+        if(Player.shield>0 || this.turbo>0){
+          // Rompe el obstáculo en vez de morir
+          o.dead=true; Player.shield=this.turbo>0?Player.shield:0;
+          Audio.sfx.shield(); Camera.kick(10);
+          Particles.burst(o.x+o.w/2,o.y+o.h/2,24,{vx:rand(-300,300),vy:rand(-260,60),g:500,color:Biome.C('glow'),size:rand(3,6),life:0.7});
+        } else { Player.dead=true; this.gameOver(); return; }
+      }
+      // Near-miss (pasar muy cerca sin tocar) → bonus de estilo
+      if(!o.near && o.x+o.w < Player.x && o.x+o.w>Player.x-40){
+        o.near=true;
+        const dy=Math.abs((Player.y+Player.h/2)-(o.y+o.h/2));
+        if(dy<Player.h*1.1){ this.addCombo(1); this.score+=10*this.multiplier(); }
+      }
+    }
+    // Monedas (con imán opcional)
+    for(const c of Coins.active){
+      const dx=(Player.x+Player.w/2)-c.x, dy=(Player.y+Player.h/2)-c.y;
+      const d=Math.hypot(dx,dy);
+      if(Player.magnet>0 && d<220*this.scale){ c.x+=dx*dt*6; c.y+=dy*dt*6; }
+      if(d < c.r+Player.w*0.5){
+        c.dead=true; this.coins++; this.addCombo(1);
+        this.score += 25*this.multiplier();
+        Audio.sfx.coin();
+        Particles.burst(c.x,c.y,10,{vx:rand(-140,140),vy:rand(-180,-20),g:400,color:[255,211,77],size:rand(2,4),life:0.6});
+      }
+    }
+    // Power-ups
+    for(const p of Powerups.active){
+      const d=Math.hypot((Player.x+Player.w/2)-p.x,(Player.y+Player.h/2)-p.y);
+      if(d < p.r+Player.w*0.5){
+        p.dead=true; this.grantPower(p.type);
+        Particles.burst(p.x,p.y,22,{vx:rand(-260,260),vy:rand(-260,40),g:400,color:PWR_META[p.type].color,size:rand(3,6),life:0.8});
+      }
+    }
+  },
+  grantPower(type){
+    Audio.sfx.power(); UI.flash(0.3);
+    if(type==='shield') Player.shield=10;
+    else if(type==='magnet') Player.magnet=10;
+    else if(type==='x2') Player.scoreX2=10;
+    else if(type==='turbo'){ this.turbo=5; Audio.sfx.turbo(); Camera.kick(8); }
+    UI.showBiome(PWR_META[type].name+'!', PWR_META[type].color);
+  },
+  addCombo(n){ this.combo+=n; this.comboTimer=2.4; UI.comboPop(); },
+
+  // ============================ BUCLE PRINCIPAL ============================
+  loop(now){
+    this.raf=requestAnimationFrame(this.loop);
+    let dt=(now-this.last)/1000; this.last=now;
+    if(dt>0.05) dt=0.05;            // clamp anti-saltos (pestaña inactiva)
+    if(dt<=0) dt=1/60;
+
+    const ctx=this.ctx, W=this.W, H=this.H;
+
+    if(this.state==='play'){ this.step(dt); }
+    else if(this.state==='menu'){ // fondo vivo en el menú
+      World.update(dt, 120*this.scale); World.emitWeather(dt,W,120*this.scale); Particles.update(dt);
+      Biome.update(dt);
+      // Cambia de bioma lentamente en el menú para mostrarlos
+      if(Math.floor(World.scroll/1400)%BIOMES.length !== Biome.next) Biome.to(Math.floor(World.scroll/1400)%BIOMES.length);
+    }
+
+    // ---- RENDER ----
+    ctx.clearRect(0,0,W,H);
+    ctx.save();
+    Camera.update(dt);
+    ctx.translate(Camera.x,Camera.y);
+
+    World.draw(ctx,W,H);
+
+    // Entidades del mundo
+    for(const o of Obstacles.active) drawObstacle(ctx,o);
+    for(const c of Coins.active) drawCoin(ctx,c);
+    for(const p of Powerups.active) drawPowerup(ctx,p);
+
+    Particles.draw(ctx);
+
+    if(this.state==='play'||this.state==='pause') Player.draw(ctx);
+
+    World.drawWeather(ctx,W,H);
+
+    // Líneas de velocidad (turbo / alta velocidad)
+    if((this.turbo>0 || this.speed>640*this.scale) && this.state==='play'){
+      ctx.save(); ctx.strokeStyle=rgba(Biome.C('glow'),0.25); ctx.lineWidth=2;
+      for(let i=0;i<10;i++){ const yy=rand(0,H), ln=rand(60,180); ctx.beginPath(); ctx.moveTo(rand(0,W),yy); ctx.lineTo(rand(0,W)-ln,yy); ctx.stroke(); }
+      ctx.restore();
+    }
+
+    ctx.restore();
+
+    // Overlay de oscuridad nocturna (fuera del shake para no “temblar”)
+    const night=World.night();
+    if(night>0.05){ ctx.fillStyle=`rgba(4,6,20,${night*0.45})`; ctx.fillRect(0,0,W,H); }
+
+    UI.hud();
+  },
+
+  // ---- Lógica de un frame jugado ----
+  step(dt){
+    this.elapsed+=dt;
+    // Velocidad creciente + turbo
+    const diff=this.difficulty();
+    this.baseSpeed = 420*this.scale + diff*520*this.scale;       // sube con el tiempo
+    const turboMul = this.turbo>0 ? 1.7 : 1;
+    this.speed = this.baseSpeed*turboMul;
+    this.turbo=Math.max(0,this.turbo-dt);
+    Audio.setTempo(diff);
+
+    // Progreso de mundo y métricas
+    World.update(dt, this.speed);
+    this.distance += this.speed*dt/22;          // “metros”
+    this.score += this.speed*dt/14 * (this.turbo>0?2:1) * (Player.scoreX2>0?2:1);
+
+    // Combo decae si no hay eventos
+    this.comboTimer-=dt; if(this.comboTimer<=0 && this.combo>0){ this.combo=Math.max(0,this.combo-1); this.comboTimer=0.5; }
+
+    // Hito de puntuación cada 1000
+    const ms=Math.floor(this.score/1000);
+    if(ms>this._lastMilestone){ this._lastMilestone=ms; Audio.sfx.milestone(); UI.flash(0.25); Camera.kick(4); }
+
+    // Cambios de bioma por distancia
+    const targetBiome = Math.floor(this.distance/800) % BIOMES.length;
+    if(targetBiome!==Biome.next) Biome.to(targetBiome);
+    Biome.update(dt);
+
+    // Generación y eventos
+    Spawner.update(dt);
+    this.maybeEvent(dt); this.applyEvent(dt);
+
+    // Mover/actualizar entidades
+    const dx=this.speed*dt;
+    for(const o of Obstacles.active){
+      o.t+=dt; o.x-=dx;
+      if(o.vyExtra){ o.y+=o.vyExtra*dt; if(o.y>this.groundY-o.h){ o.y=this.groundY-o.h; o.vyExtra=0; } }
+      if(o.x+o.w<-80) o.dead=true;
+    }
+    for(const c of Coins.active){ c.t+=dt; c.x-=dx; if(c.x<-40) c.dead=true; }
+    for(const p of Powerups.active){ p.t+=dt; p.x-=dx; if(p.x<-60) p.dead=true; }
+
+    Player.update(dt);
+    this.collide(dt);
+
+    // Clima + partículas
+    World.emitWeather(dt,this.W,this.speed);
+    Particles.update(dt);
+
+    // Limpieza de pools (evita fugas)
+    Obstacles.sweep(); Coins.sweep(); Powerups.sweep();
+  },
+  _lastMilestone:0
+};
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Colisión AABB (caja vs caja).
+   ───────────────────────────────────────────────────────────────────────── */
+function aabb(a,b){ return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y; }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   ARRANQUE
+   ───────────────────────────────────────────────────────────────────────── */
+window.addEventListener('load', ()=>{ Game.init(); });
+// Pausa automática al perder foco (no jugar “a ciegas”)
+document.addEventListener('visibilitychange', ()=>{ if(document.hidden && Game.state==='play') Game.togglePause(); });
+
+})();
+</script>
+</body>
+</html>
