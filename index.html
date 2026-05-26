@@ -195,8 +195,71 @@
   #boostTag{ position:absolute; left:50%; top:54%; transform:translate(-50%,-50%);
     font-size:clamp(18px,4vw,32px); font-weight:900; letter-spacing:.15em; color:#ff2bd6;
     text-shadow:0 0 20px rgba(255,43,214,.8); opacity:0; pointer-events:none; }
+
+  /* ── Google Auth UI ── */
+  #googleBtn{
+    display:inline-flex; align-items:center; gap:9px;
+    background:rgba(255,255,255,.08); border:1.5px solid rgba(255,255,255,.22);
+    color:#eaf6ff; font-size:13px; font-weight:700; letter-spacing:.06em;
+    padding:8px 18px; border-radius:40px; cursor:pointer;
+    transition:background .18s, border-color .18s, transform .12s;
+    margin-top:12px;
+  }
+  #googleBtn:hover{ background:rgba(255,255,255,.16); border-color:rgba(0,240,255,.6);
+    transform:translateY(-2px); }
+  #googleBtn svg{ flex-shrink:0; }
+  #googleInfo{
+    display:none; align-items:center; gap:8px;
+    font-size:12px; opacity:.85; margin-top:8px;
+    background:rgba(0,240,255,.07); border:1px solid rgba(0,240,255,.2);
+    padding:6px 14px; border-radius:30px;
+  }
+  #googleInfo img{ width:26px; height:26px; border-radius:50%;
+    border:2px solid rgba(0,240,255,.5); }
+  .google-status{
+    position:absolute; top:14px; right:14px;
+    display:flex; flex-direction:column; align-items:flex-end; gap:4px; z-index:20;
+  }
+  .cloud-badge{
+    font-size:10px; letter-spacing:.12em; padding:3px 10px; border-radius:20px;
+    font-weight:800;
+  }
+  .cloud-on { background:rgba(92,255,177,.18); color:#5cffb1;
+    border:1px solid rgba(92,255,177,.4); }
+  .cloud-off{ background:rgba(255,255,255,.08); color:rgba(255,255,255,.45);
+    border:1px solid rgba(255,255,255,.15); }
+  #setupModal{
+    position:fixed; inset:0; z-index:9999;
+    background:rgba(0,0,0,.82); display:flex; align-items:center; justify-content:center;
+  }
+  #setupModal.hidden{ display:none; }
+  #setupBox{
+    background:#0c0f20; border:1.5px solid rgba(0,240,255,.35);
+    border-radius:20px; padding:32px 28px; max-width:480px; width:92%;
+    font-size:13px; line-height:1.7; position:relative;
+  }
+  #setupBox h2{ color:var(--neon); font-size:20px; margin-bottom:12px; }
+  #setupBox ol{ padding-left:20px; margin-bottom:18px; opacity:.9; }
+  #setupBox li{ margin-bottom:6px; }
+  #setupBox a{ color:var(--neon); }
+  #setupBox code{
+    background:rgba(0,240,255,.1); border:1px solid rgba(0,240,255,.25);
+    border-radius:5px; padding:2px 7px; font-size:11px; font-family:monospace;
+  }
+  #setupClose{ position:absolute; top:14px; right:18px;
+    background:none; border:none; color:#fff; font-size:22px; cursor:pointer; }
+  #setupCopy{
+    width:100%; padding:10px; border-radius:10px; background:rgba(0,240,255,.12);
+    border:1px solid rgba(0,240,255,.4); color:var(--neon); font-weight:800;
+    font-size:13px; cursor:pointer; letter-spacing:.08em; transition:background .15s;
+  }
+  #setupCopy:hover{ background:rgba(0,240,255,.22); }
 </style>
 </head>
+<!-- ── Firebase SDK (Google Auth + Firestore) ── -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <body>
 <div id="stage">
   <canvas id="game"></canvas>
@@ -266,6 +329,11 @@
 
   <!-- ====================== MENÚ INICIAL ====================== -->
   <div class="screen" id="menu">
+    <!-- Badge de estado de nube (esquina superior derecha del menú) -->
+    <div class="google-status">
+      <span id="cloudBadge" class="cloud-badge cloud-off">&#x2601; Sin sesión</span>
+    </div>
+
     <div class="subtitle">Endless Runner</div>
     <h1 class="title">DINO&nbsp;ODYSSEY</h1>
     <div class="hint">
@@ -274,7 +342,39 @@
     </div>
     <button class="btn" id="playBtn">&#9654; Jugar</button>
     <button class="btn ghost" id="howBtn">Cómo se juega</button>
-    <div class="credit">WASD / Flechas / Táctil · Récord guardado localmente</div>
+
+    <!-- Google sign-in -->
+    <button id="googleBtn">
+      <svg width="18" height="18" viewBox="0 0 48 48">
+        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.36-8.16 2.36-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+        <path fill="none" d="M0 0h48v48H0z"/>
+      </svg>
+      Conectar con Google
+    </button>
+    <div id="googleInfo"></div>
+    <div class="credit">WASD / Flechas / Táctil · Progreso en la nube con Google</div>
+  </div>
+
+  <!-- ── Modal de configuración Firebase ── -->
+  <div id="setupModal" class="hidden">
+    <div id="setupBox">
+      <button id="setupClose">&#10005;</button>
+      <h2>⚙️ Configura Firebase</h2>
+      <p>Para guardar el progreso en la nube necesitas tu propia configuración de Firebase (es gratis):</p>
+      <ol>
+        <li>Ve a <a href="https://console.firebase.google.com" target="_blank">console.firebase.google.com</a></li>
+        <li>Crea un proyecto nuevo</li>
+        <li>En <b>Authentication → Sign-in method</b> activa <b>Google</b></li>
+        <li>En <b>Firestore Database</b> crea una base de datos (modo producción)</li>
+        <li>En <b>Project settings → Your apps</b> agrega una app Web y copia la config</li>
+        <li>Pega los valores en <code>FIREBASE_CFG</code> dentro del <code>index.html</code></li>
+      </ol>
+      <p style="margin-bottom:14px;font-size:11px;opacity:.7">Las reglas de Firestore deben permitir lectura/escritura autenticada. Copia esto en <b>Reglas</b>:</p>
+      <button id="setupCopy">📋 Copiar reglas de Firestore</button>
+    </div>
   </div>
 
   <!-- ====================== PAUSA ====================== -->
@@ -821,6 +921,8 @@ const CharSelect = {
   _save(){
     localStorage.setItem('dino_unlocked', JSON.stringify([...this._unlocked]));
     localStorage.setItem('dino_char', this.selected);
+    // ☁️ También guardar en nube si hay sesión
+    if(typeof CloudSync!=='undefined') CloudSync.saveProgress();
   },
   isUnlocked(id){ return this._unlocked.has(id); },
 
@@ -2031,6 +2133,173 @@ const Camera = {
 };
 
 /* ─────────────────────────────────────────────────────────────────────────
+   12-A) CLOUD SYNC — Google Auth + Firestore (progreso vinculado por cuenta).
+   ───────────────────────────────────────────────────────────────────────── */
+
+// ══════════════════════════════════════════════════════════════════════════
+//  🔧 CONFIGURACIÓN FIREBASE — reemplaza ESTOS VALORES con los de tu
+//     proyecto en https://console.firebase.google.com
+//  Pasos rápidos:
+//   1. Crea un proyecto  →  Agrega app Web  →  copia la config de abajo.
+//   2. Authentication → Sign-in method → activa Google.
+//   3. Firestore Database → Crear base de datos (modo producción).
+//   4. Firestore → Reglas → pega:
+//        rules_version='2';
+//        service cloud.firestore {
+//          match /databases/{database}/documents {
+//            match /users/{uid} {
+//              allow read, write: if request.auth != null && request.auth.uid == uid;
+//            }
+//          }
+//        }
+// ══════════════════════════════════════════════════════════════════════════
+const FIREBASE_CFG = {
+  apiKey:            "TU_API_KEY",
+  authDomain:        "TU_PROYECTO.firebaseapp.com",
+  projectId:         "TU_PROYECTO_ID",
+  storageBucket:     "TU_PROYECTO.appspot.com",
+  messagingSenderId: "TU_SENDER_ID",
+  appId:             "TU_APP_ID"
+};
+
+const CloudSync = {
+  app:null, auth:null, db:null, user:null, ready:false, _saving:false,
+
+  // ── Inicialización ──────────────────────────────────────────────────────
+  init(){
+    try{
+      // ¿Está Firebase disponible y la config parece rellena?
+      if(typeof firebase==='undefined'){ console.warn('CloudSync: SDK Firebase no cargado'); return; }
+      if(!FIREBASE_CFG.apiKey || FIREBASE_CFG.apiKey.startsWith('TU_')){
+        console.info('CloudSync: sin config Firebase — modo offline'); return;
+      }
+      this.app  = firebase.initializeApp(FIREBASE_CFG);
+      this.auth = firebase.auth();
+      this.db   = firebase.firestore();
+      this.ready= true;
+
+      // Escucha cambios de sesión (login / logout / recarga de página)
+      this.auth.onAuthStateChanged(u=>{
+        this.user = u;
+        this._updateUI();
+        if(u) this._loadProgress();
+      });
+    }catch(e){ console.warn('CloudSync init error:',e); }
+  },
+
+  // ── Login con Google ────────────────────────────────────────────────────
+  signIn(){
+    if(!this.ready){ this._showSetup(); return; }
+    const prov = new firebase.auth.GoogleAuthProvider();
+    this.auth.signInWithPopup(prov).catch(e=>{
+      if(e.code!=='auth/popup-closed-by-user') console.warn('Sign-in:',e);
+    });
+  },
+
+  signOut(){
+    if(!this.ready||!this.auth) return;
+    this.auth.signOut();
+  },
+
+  // ── Cargar progreso desde Firestore ────────────────────────────────────
+  async _loadProgress(){
+    if(!this.user||!this.db) return;
+    try{
+      const snap = await this.db.collection('users').doc(this.user.uid).get();
+      if(!snap.exists) return; // primer uso — no hay nada aún
+      const d = snap.data();
+
+      // Toma el mejor valor entre nube y local (protege al jugador)
+      if((d.best||0) > (Game.best||0)){
+        Game.best = d.best;
+        localStorage.setItem('dino_odyssey_best', Math.floor(d.best));
+        const el = document.getElementById('bestVal');
+        if(el) el.textContent = Math.floor(d.best).toLocaleString();
+      }
+      if((d.totalCoins||0) > (Game.totalCoins||0)){
+        Game.totalCoins = d.totalCoins;
+        localStorage.setItem('dino_total_coins', Math.floor(d.totalCoins));
+      }
+      if(Array.isArray(d.unlocked)){
+        d.unlocked.forEach(id=> CharSelect._unlocked.add(id));
+        localStorage.setItem('dino_unlocked', JSON.stringify([...CharSelect._unlocked]));
+      }
+      if(d.selected){
+        CharSelect.selected = d.selected;
+        localStorage.setItem('dino_char', d.selected);
+      }
+      console.info(`☁️ Progreso cargado para ${this.user.displayName||this.user.email}`);
+    }catch(e){ console.warn('CloudSync _loadProgress:',e); }
+  },
+
+  // ── Guardar progreso en Firestore ───────────────────────────────────────
+  saveProgress(){
+    if(!this.ready||!this.user||!this.db) return;
+    if(this._saving) return; // evita writes simultáneos
+    this._saving=true;
+    this.db.collection('users').doc(this.user.uid).set({
+      best:        Math.floor(Game.best||0),
+      totalCoins:  Math.floor(Game.totalCoins||0),
+      unlocked:    [...CharSelect._unlocked],
+      selected:    CharSelect.selected||'raptor',
+      email:       this.user.email,
+      displayName: this.user.displayName||'',
+      photoURL:    this.user.photoURL||'',
+      updatedAt:   firebase.firestore.FieldValue.serverTimestamp()
+    },{merge:true})
+    .then(()=>{ this._saving=false; console.info('☁️ Progreso guardado'); })
+    .catch(e=>{ this._saving=false; console.warn('CloudSync save:',e); });
+  },
+
+  // ── UI: botón + badge ───────────────────────────────────────────────────
+  _updateUI(){
+    const btn   = document.getElementById('googleBtn');
+    const info  = document.getElementById('googleInfo');
+    const badge = document.getElementById('cloudBadge');
+    if(!btn) return;
+
+    if(this.user){
+      // Botón → cerrar sesión
+      btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 48 48">
+        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.36-8.16 2.36-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+      </svg> Cerrar sesión`;
+      btn.onclick = ()=> this.signOut();
+
+      // Info de usuario
+      if(info){
+        const img = this.user.photoURL
+          ? `<img src="${this.user.photoURL}" onerror="this.style.display='none'">`
+          : '👤';
+        info.innerHTML = `${img}<span>${this.user.displayName||this.user.email}</span>`;
+        info.style.display='flex';
+      }
+
+      // Badge nube activa
+      if(badge){ badge.textContent='☁️ Progreso en la nube'; badge.className='cloud-badge cloud-on'; }
+    } else {
+      btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 48 48">
+        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.36-8.16 2.36-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+      </svg> Conectar con Google`;
+      btn.onclick = ()=> this.signIn();
+      if(info) info.style.display='none';
+      if(badge){ badge.textContent='☁️ Sin sesión'; badge.className='cloud-badge cloud-off'; }
+    }
+  },
+
+  // ── Modal de instrucciones de setup ────────────────────────────────────
+  _showSetup(){
+    const m = document.getElementById('setupModal');
+    if(m) m.classList.remove('hidden');
+  }
+};
+
+/* ─────────────────────────────────────────────────────────────────────────
    12) INTERFAZ (DOM) — actualiza HUD y muestra/oculta pantallas.
    ───────────────────────────────────────────────────────────────────────── */
 const $ = id=>document.getElementById(id);
@@ -2105,6 +2374,19 @@ const Game = {
     if(matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window) UI.el.touch.classList.add('show');
 
     this._wireButtons();
+
+    // Inicializar sincronización con Google / Firebase
+    CloudSync.init();
+
+    // Botones del modal de configuración Firebase
+    const sc = document.getElementById('setupClose');
+    if(sc) sc.onclick = ()=> document.getElementById('setupModal').classList.add('hidden');
+    const cp = document.getElementById('setupCopy');
+    if(cp) cp.onclick = ()=>{
+      const rules = `rules_version='2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    match /users/{uid} {\n      allow read, write: if request.auth != null && request.auth.uid == uid;\n    }\n  }\n}`;
+      navigator.clipboard.writeText(rules).then(()=>{ cp.textContent='✅ Copiado!'; setTimeout(()=>cp.textContent='📋 Copiar reglas de Firestore',2000); });
+    };
+
     UI.show('menu');
     this.last=performance.now();
     this.loop=this.loop.bind(this);
@@ -2167,6 +2449,8 @@ const Game = {
     // Acumular monedas totales para la tienda
     this.totalCoins = (this.totalCoins||0) + this.coins;
     localStorage.setItem('dino_total_coins', Math.floor(this.totalCoins));
+    // ☁️ Guardar en la nube si hay sesión activa
+    CloudSync.saveProgress();
     UI.el.newBest.style.display = isBest?'block':'none';
     UI.el.goScore.textContent = Math.floor(this.score).toLocaleString();
     UI.el.goDist.textContent  = Math.floor(this.distance);
