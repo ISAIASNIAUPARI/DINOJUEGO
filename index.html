@@ -1676,11 +1676,98 @@ function drawObstacle(ctx,o){
     ctx.closePath(); ctx.fill();
     ctx.fillStyle='rgba(255,255,255,.3)'; ctx.fillRect(x,y+h-3,w,3);
   } else if(o.sub==='robot'){
-    ctx.shadowBlur=16; ctx.shadowColor='rgba(120,200,255,.8)';
-    ctx.fillStyle='#3a4a66'; rr(ctx,x,y,w,h,6); ctx.fill();
-    ctx.fillStyle='#8fd0ff'; ctx.fillRect(x+w*0.2, y+h*0.2, w*0.6, h*0.18); // visor
-    ctx.fillStyle='#aef'; const ex=x+w*0.5+Math.sin(o.t*5)*w*0.15; ctx.fillRect(ex,y+h*0.22,w*0.12,h*0.12);
-    ctx.fillStyle='#2a3650'; ctx.fillRect(x+w*0.15,y+h, w*0.2, 6*s); ctx.fillRect(x+w*0.65,y+h, w*0.2, 6*s);
+    /* ── TRICERATOPS — pixel-art oscuro con textura y color ─────────
+       Inspirado en el clásico Chrome Dino triceratops: silueta robusta,
+       cuerpo bajo y ancho, gran frill cefálico y 3 cuernos prominentes.
+       Se añaden: escamas de múltiples tonos, vientre claro, cuernos óseos,
+       ojo ámbar, tinte cálido oscuro y sombra proyectada.                */
+    ctx.shadowBlur=14; ctx.shadowColor='rgba(30,50,10,.85)';
+
+    // Paleta Triceratops
+    const tBody ='#1c1c14';   // cuerpo principal (negro cálido)
+    const tShad ='#0e0e0a';   // sombra inferior / patas
+    const tBelly='#2e2e1e';   // vientre más claro
+    const tFrill='#181010';   // frill (cresta cefálica)
+    const tFrEdg='#2a1820';   // borde del frill
+    const tHorn ='#c8c2a0';   // hueso del cuerno (crema)
+    const tHornD='#3a3020';   // base oscura del cuerno
+    const tEye  ='#d09010';   // ojo ámbar
+    const tScale='#161610';   // marcas de escama
+    const tHilit='#2e2e24';   // resalte dorsal
+
+    const R=(c,rx,ry,rw,rh)=>{ ctx.fillStyle=c; ctx.fillRect(Math.round(x+rx),Math.round(y+ry),Math.max(1,Math.round(rw)),Math.max(1,Math.round(rh))); };
+
+    // ── Sombra proyectada ──
+    ctx.fillStyle='rgba(0,0,0,.22)';
+    ctx.beginPath(); ctx.ellipse(x+w*.48, y+h+4*s, w*.52, 5*s, 0, 0, TAU); ctx.fill();
+
+    // ── PATAS (4 patas cortas, cuadrúpedo) ──
+    const legH=h*.22, legW=w*.13;
+    const legOsc = Math.sin(o.t*8)*2*s;
+    [[w*.08,legOsc],[w*.26,-legOsc],[w*.50,legOsc],[w*.68,-legOsc]].forEach(([lx,lo])=>{
+      R(tShad, lx, h*.78+lo, legW, legH);
+      R(tBody,  lx+legW*.15, h*.78+lo, legW*.7, legH*.8);
+    });
+
+    // ── CUERPO PRINCIPAL (bajo y robusto) ──
+    R(tBody,  w*.04, h*.28, w*.80, h*.52);
+    // Vientre más claro (franja inferior)
+    R(tBelly, w*.06, h*.60, w*.76, h*.18);
+    // Textura de escamas (manchas oscuras)
+    [[w*.10,h*.34],[w*.24,h*.40],[w*.40,h*.36],[w*.56,h*.32],[w*.68,h*.40],
+     [w*.14,h*.52],[w*.34,h*.54],[w*.52,h*.50],[w*.66,h*.56]].forEach(([sx,sy])=>{
+      R(tScale, sx, sy, w*.07, h*.06);
+    });
+    // Resalte dorsal
+    R(tHilit, w*.08, h*.28, w*.76, h*.06);
+    // Borde oscuro inferior del cuerpo
+    R(tShad,  w*.04, h*.76, w*.80, h*.04);
+
+    // ── COLA (pequeña, a la izquierda) ──
+    R(tBody,  -w*.06, h*.42, w*.12, h*.20);
+    R(tShad,  -w*.10, h*.56, w*.10, h*.10);
+
+    // ── FRILL (cresta cefálica grande) ──
+    // Bloque principal del frill
+    R(tFrill, w*.56, -h*.18, w*.36, h*.42);
+    // Borde del frill (más claro en los bordes)
+    R(tFrEdg, w*.56, -h*.18, w*.04, h*.42);   // borde izquierdo
+    R(tFrEdg, w*.88, -h*.18, w*.04, h*.42);   // borde derecho
+    R(tFrEdg, w*.56, -h*.18, w*.36, h*.05);   // borde superior
+    // Patrón interior del frill (marcas de textura)
+    [[w*.62,h*.00],[w*.74,h*.04],[w*.62,h*.12],[w*.76,-h*.08]].forEach(([fx,fy])=>{
+      R(tFrEdg, fx, fy, w*.06, h*.06);
+    });
+
+    // ── CABEZA ──
+    R(tBody,  w*.54, h*.14, w*.40, h*.32);
+    // Hocico que se proyecta hacia la derecha
+    R(tBody,  w*.78, h*.24, w*.22, h*.18);
+    // Mandíbula inferior
+    R(tShad,  w*.78, h*.36, w*.20, h*.10);
+    // Borde del hocico (oscuro)
+    R(tShad,  w*.94, h*.20, w*.04, h*.30);
+    // Textura de la cabeza
+    R(tScale, w*.58, h*.18, w*.10, h*.08);
+    R(tScale, w*.70, h*.16, w*.08, h*.08);
+
+    // ── 3 CUERNOS ──
+    // Cuerno nasal (en el hocico)
+    ctx.fillStyle=tHornD; ctx.beginPath(); ctx.moveTo(x+w*.90,y+h*.24); ctx.lineTo(x+w*.98,y+h*.06); ctx.lineTo(x+w*.84,y+h*.22); ctx.closePath(); ctx.fill();
+    ctx.fillStyle=tHorn;  ctx.beginPath(); ctx.moveTo(x+w*.88,y+h*.24); ctx.lineTo(x+w*.96,y+h*.08); ctx.lineTo(x+w*.82,y+h*.22); ctx.closePath(); ctx.fill();
+    // Cuerno supraorbital izquierdo
+    ctx.fillStyle=tHornD; ctx.beginPath(); ctx.moveTo(x+w*.66,y+h*.16); ctx.lineTo(x+w*.60,y-h*.06); ctx.lineTo(x+w*.72,y+h*.14); ctx.closePath(); ctx.fill();
+    ctx.fillStyle=tHorn;  ctx.beginPath(); ctx.moveTo(x+w*.64,y+h*.16); ctx.lineTo(x+w*.58,y-h*.04); ctx.lineTo(x+w*.70,y+h*.14); ctx.closePath(); ctx.fill();
+    // Cuerno supraorbital derecho
+    ctx.fillStyle=tHornD; ctx.beginPath(); ctx.moveTo(x+w*.76,y+h*.14); ctx.lineTo(x+w*.70,y-h*.08); ctx.lineTo(x+w*.82,y+h*.12); ctx.closePath(); ctx.fill();
+    ctx.fillStyle=tHorn;  ctx.beginPath(); ctx.moveTo(x+w*.74,y+h*.14); ctx.lineTo(x+w*.68,y-h*.06); ctx.lineTo(x+w*.80,y+h*.12); ctx.closePath(); ctx.fill();
+
+    // ── OJO ÁMBAR ──
+    const eyeX=x+w*.82, eyeY=y+h*.22, eyeR=Math.max(3,w*.038);
+    ctx.fillStyle='#0a0a06'; ctx.beginPath(); ctx.arc(eyeX,eyeY,eyeR+1,0,TAU); ctx.fill(); // borde
+    ctx.fillStyle=tEye;      ctx.beginPath(); ctx.arc(eyeX,eyeY,eyeR,0,TAU); ctx.fill();
+    ctx.fillStyle='#1a0800'; ctx.beginPath(); ctx.arc(eyeX+1,eyeY,eyeR*.5,0,TAU); ctx.fill(); // pupila
+    ctx.fillStyle='rgba(255,255,200,.7)'; ctx.beginPath(); ctx.arc(eyeX-1,eyeY-1,eyeR*.22,0,TAU); ctx.fill(); // brillo
   } else if(o.sub==='dino'){
     ctx.shadowBlur=14; ctx.shadowColor='rgba(255,90,108,.7)';
     ctx.fillStyle='#c0455a'; rr(ctx,x,y+h*0.2,w*0.8,h*0.6,8); ctx.fill();
@@ -1704,17 +1791,117 @@ function drawObstacle(ctx,o){
     ctx.beginPath(); ctx.arc(x+w*0.3,y+h*0.3,4*s,0,TAU); ctx.arc(x+w*0.7,y+h*0.3,4*s,0,TAU); ctx.fill();
     ctx.strokeStyle='#3a2360'; ctx.lineWidth=2*s; // dientes
     for(let i=0;i<4;i++){ ctx.beginPath(); ctx.moveTo(x+w*(0.2+i*0.2), y+h*0.6); ctx.lineTo(x+w*(0.25+i*0.2), y+h*0.78); ctx.stroke(); }
-  } else { // rock (por defecto)
-    ctx.shadowBlur=10; ctx.shadowColor='rgba(0,0,0,.4)';
-    const rockC=Biome.C('mid').map(c=>c+30);
-    ctx.fillStyle=rgba(rockC,1);
-    ctx.beginPath();
-    ctx.moveTo(x, y+h);
-    ctx.lineTo(x+w*0.15, y+h*0.3); ctx.lineTo(x+w*0.5, y);
-    ctx.lineTo(x+w*0.85, y+h*0.4); ctx.lineTo(x+w, y+h);
-    ctx.closePath(); ctx.fill();
-    ctx.fillStyle='rgba(255,255,255,.12)'; ctx.beginPath();
-    ctx.moveTo(x+w*0.5,y); ctx.lineTo(x+w*0.6,y+h*0.4); ctx.lineTo(x+w*0.35,y+h*0.4); ctx.closePath(); ctx.fill();
+  } else {
+    /* ── CACTUS — estilo boceto a lápiz, verde real con textura ─────
+       Reemplaza el obstáculo de roca. Se dibujan 1-3 cactos según
+       el ancho del obstáculo. Cada uno tiene:
+         · Tronco con bordes pixelados irregulares (hand-drawn)
+         · Brazos en L extendidos a ambos lados
+         · Capas de color para simular volumen
+         · Sombreado lateral (lado oscuro izquierdo, luz derecha)
+         · Hatching a lápiz (líneas diagonales finas)
+         · Puntitas/espinas en los bordes
+         · Raíz ensanchada                                            */
+    ctx.shadowBlur=12; ctx.shadowColor='rgba(30,100,10,.6)';
+
+    // Paleta de verde tipo lápiz
+    const cDark  ='#163a08';   // sombra / lado izquierdo
+    const cMid   ='#2a7014';   // cuerpo principal
+    const cLight ='#3ea020';   // cara iluminada / derecha
+    const cHilit ='#5cc230';   // borde superior más claro
+    const cSpine ='#aad080';   // espinas / puntitas
+    const cGround='#1a2a08';   // base / raíz
+
+    // Función: dibuja un cactus individual en (cx, baseY) con altura ch
+    const drawCactus=(cx, baseY, ch, trunkW)=>{
+      const tw=trunkW;
+
+      // ── RAÍZ (base ensanchada) ──
+      ctx.fillStyle=cGround;
+      ctx.fillRect(Math.round(cx-tw*.62), Math.round(baseY-ch*.08), Math.round(tw*1.24), Math.round(ch*.08));
+
+      // ── TRONCO PRINCIPAL (cuerpo de bloques irregulares) ──
+      // Se dibuja en 3 capas de ancho para simular bordes rugosos
+      // Lado oscuro (izquierdo)
+      ctx.fillStyle=cDark;
+      ctx.fillRect(Math.round(cx-tw*.5),  Math.round(baseY-ch), Math.round(tw*.32), Math.round(ch));
+      // Cuerpo central
+      ctx.fillStyle=cMid;
+      ctx.fillRect(Math.round(cx-tw*.22), Math.round(baseY-ch), Math.round(tw*.44), Math.round(ch));
+      // Lado iluminado (derecho)
+      ctx.fillStyle=cLight;
+      ctx.fillRect(Math.round(cx+tw*.22), Math.round(baseY-ch), Math.round(tw*.28), Math.round(ch));
+      // Filo superior más claro
+      ctx.fillStyle=cHilit;
+      ctx.fillRect(Math.round(cx-tw*.5),  Math.round(baseY-ch),     Math.round(tw), Math.round(ch*.06));
+
+      // ── BRAZOS EN L (a los 2/3 de altura) ──
+      const armY=baseY-ch*.64;
+      const armLen=tw*1.1, armW=tw*.52, armH=ch*.28;
+      // Brazo izquierdo ──  forma de L invertida
+      ctx.fillStyle=cDark;   ctx.fillRect(Math.round(cx-tw*.5-armLen+tw*.08), Math.round(armY), Math.round(armLen), Math.round(armW));
+      ctx.fillStyle=cMid;    ctx.fillRect(Math.round(cx-tw*.5-armLen+tw*.12), Math.round(armY+armW*.18), Math.round(armLen*.85), Math.round(armW*.65));
+      ctx.fillStyle=cLight;  ctx.fillRect(Math.round(cx-tw*.5-armLen+tw*.14), Math.round(armY+armW*.3), Math.round(armLen*.7), Math.round(armW*.35));
+      ctx.fillStyle=cHilit;  ctx.fillRect(Math.round(cx-tw*.5-armLen+tw*.10), Math.round(armY), Math.round(armLen*.9), Math.round(armW*.12));
+      // Parte vertical del brazo izq (sube)
+      ctx.fillStyle=cDark;   ctx.fillRect(Math.round(cx-tw*.5-armLen+tw*.08), Math.round(armY-armH), Math.round(armW), Math.round(armH));
+      ctx.fillStyle=cMid;    ctx.fillRect(Math.round(cx-tw*.5-armLen+tw*.12), Math.round(armY-armH), Math.round(armW*.65), Math.round(armH));
+      ctx.fillStyle=cLight;  ctx.fillRect(Math.round(cx-tw*.5-armLen+tw*.30), Math.round(armY-armH), Math.round(armW*.35), Math.round(armH));
+      ctx.fillStyle=cHilit;  ctx.fillRect(Math.round(cx-tw*.5-armLen+tw*.08), Math.round(armY-armH), Math.round(armW*.9), Math.round(armH*.08));
+
+      // Brazo derecho
+      ctx.fillStyle=cDark;   ctx.fillRect(Math.round(cx+tw*.5), Math.round(armY), Math.round(armLen), Math.round(armW));
+      ctx.fillStyle=cMid;    ctx.fillRect(Math.round(cx+tw*.54), Math.round(armY+armW*.18), Math.round(armLen*.85), Math.round(armW*.65));
+      ctx.fillStyle=cLight;  ctx.fillRect(Math.round(cx+tw*.60), Math.round(armY+armW*.3), Math.round(armLen*.7), Math.round(armW*.35));
+      ctx.fillStyle=cHilit;  ctx.fillRect(Math.round(cx+tw*.50), Math.round(armY), Math.round(armLen*.9), Math.round(armW*.12));
+      ctx.fillStyle=cDark;   ctx.fillRect(Math.round(cx+tw*.5+armLen-armW*.08), Math.round(armY-armH), Math.round(armW), Math.round(armH));
+      ctx.fillStyle=cMid;    ctx.fillRect(Math.round(cx+tw*.5+armLen-armW*.06), Math.round(armY-armH), Math.round(armW*.65), Math.round(armH));
+      ctx.fillStyle=cLight;  ctx.fillRect(Math.round(cx+tw*.5+armLen+armW*.02), Math.round(armY-armH), Math.round(armW*.3), Math.round(armH));
+      ctx.fillStyle=cHilit;  ctx.fillRect(Math.round(cx+tw*.5+armLen-armW*.08), Math.round(armY-armH), Math.round(armW*.9), Math.round(armH*.08));
+
+      // ── HATCHING TIPO LÁPIZ (líneas diagonales finas que simulan trazado) ──
+      ctx.save();
+      ctx.globalAlpha=0.18;
+      ctx.strokeStyle=cDark; ctx.lineWidth=Math.max(0.5, s*0.7);
+      const hatchSpacing=Math.max(3, tw*.15);
+      for(let hx=cx-tw*.5; hx<cx+tw*.5+2; hx+=hatchSpacing){
+        ctx.beginPath(); ctx.moveTo(hx, baseY-ch); ctx.lineTo(hx+hatchSpacing*.8, baseY); ctx.stroke();
+      }
+      ctx.restore();
+
+      // ── ESPINAS (puntitas blancas en los bordes) ──
+      ctx.fillStyle=cSpine;
+      // Espinas del tronco izquierdo
+      for(let sy=0; sy<4; sy++){
+        const ey=baseY-ch*(0.25+sy*.18);
+        ctx.fillRect(Math.round(cx-tw*.52), Math.round(ey), Math.round(tw*.1), Math.round(s*1.5));
+      }
+      // Espinas del tronco derecho
+      for(let sy=0; sy<4; sy++){
+        const ey=baseY-ch*(0.30+sy*.18);
+        ctx.fillRect(Math.round(cx+tw*.44), Math.round(ey), Math.round(tw*.1), Math.round(s*1.5));
+      }
+      // Espinas en punta superior del tronco
+      ctx.fillRect(Math.round(cx-tw*.08), Math.round(baseY-ch-s*3), Math.round(tw*.16), Math.round(s*3));
+      // Espinas en puntas de brazos
+      ctx.fillRect(Math.round(cx-tw*.5-armLen), Math.round(armY-armH-s*3), Math.round(tw*.14), Math.round(s*3));
+      ctx.fillRect(Math.round(cx+tw*.5+armLen+armW-.08*tw), Math.round(armY-armH-s*3), Math.round(tw*.14), Math.round(s*3));
+    };
+
+    // Cuántos cactos caben (1, 2 o 3 según el ancho del obstáculo)
+    const nC = w > 72*s ? 3 : w > 48*s ? 2 : 1;
+    const baseY=y+h;
+
+    if(nC===1){
+      drawCactus(x+w*.5, baseY, h, w*.42);
+    } else if(nC===2){
+      drawCactus(x+w*.28, baseY, h,       w*.30);
+      drawCactus(x+w*.72, baseY, h*.82,   w*.26);
+    } else {
+      drawCactus(x+w*.18, baseY, h*.75,   w*.22);
+      drawCactus(x+w*.50, baseY, h,       w*.28);
+      drawCactus(x+w*.82, baseY, h*.70,   w*.20);
+    }
   }
   ctx.restore();
 }
