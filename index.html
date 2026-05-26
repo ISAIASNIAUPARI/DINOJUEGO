@@ -826,43 +826,243 @@ const Player = {
     this._body(ctx, this.x, this.y, this.h, false);
   },
 
-  // Dibuja el cuerpo del corredor de forma procedural (sin imágenes)
-  _body(ctx,x,y,h,ghost){
-    const s=Game.scale, w=this.w, glow=Biome.C('glow');
-    const cx=x+w/2;
-    ctx.save();
-    if(!ghost){ ctx.shadowBlur=18; ctx.shadowColor=rgba(glow,0.7); }
-    // Color del personaje (con tinte por power-ups)
-    let main=[90,230,255];
-    if(Game.turbo>0) main=[255,120,40];
-    else if(this.scoreX2>0) main=[255,210,80];
-    const grad=ctx.createLinearGradient(x,y,x,y+h);
-    grad.addColorStop(0, rgba(main,1)); grad.addColorStop(1, rgba(main.map(c=>c*0.55),1));
-    ctx.fillStyle=grad;
+  /* ═══════════════════════════════════════════════════════════════
+     DINOSAURIO ESTILO CHROME — dibujo procedural con rectángulos.
+     Inspirado 98 % en el T-Rex offline de Chrome: blanco/negro,
+     pixel-art retro, silueta icónica. Vista lateral, cara a la DERECHA.
 
-    // Cuerpo (cápsula)
-    const bodyTop=y+h*0.18, bodyH=h*0.62, bw=w*0.78;
-    rr(ctx, cx-bw/2, bodyTop, bw, bodyH, w*0.28); ctx.fill();
-    // Cola
-    ctx.beginPath(); ctx.moveTo(cx-bw/2, bodyTop+bodyH*0.3);
-    ctx.quadraticCurveTo(x-w*0.4, bodyTop+bodyH*0.1, x-w*0.35, bodyTop-h*0.05);
-    ctx.lineTo(x-w*0.05, bodyTop+bodyH*0.25); ctx.closePath(); ctx.fill();
-    // Cabeza
-    const hx=cx+bw*0.28, hy=y+h*0.12;
-    rr(ctx, hx-w*0.05, hy, w*0.5, h*0.3, w*0.2); ctx.fill();
-    // Ojo
-    if(!ghost){
-      ctx.fillStyle='#04121a'; ctx.beginPath(); ctx.arc(hx+w*0.28, hy+h*0.1, w*0.06, 0, TAU); ctx.fill();
-      ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(hx+w*0.30, hy+h*0.08, w*0.025, 0, TAU); ctx.fill();
+     Añadidos sobre el original:
+       · Doble capa de sombra/luz en cada pieza (más volumen)
+       · Animación de patas con muslo + tibia + pie independientes
+       · Oscilación sutil de cola sincronizada con el ciclo de carrera
+       · Brazo vestigial articulado
+       · Parpadeo automático cada ~3 s
+       · Pose de agachado con cabeza extendida y patas dobladas
+       · Tinte cromático muy sutil cuando hay power-ups activos
+         (mantiene la estética monocromática)
+     ═══════════════════════════════════════════════════════════════ */
+  _body(ctx, x, y, h, ghost){
+    const s = Game.scale, w = this.w;
+
+    // Snap a pixels enteros → bordes pixelados nítidos (pixel-art)
+    x = Math.round(x);
+    y = Math.round(y);
+    const W = Math.round(w);
+    const H = Math.round(h);
+
+    // ── Paleta base: gris clásico del Chrome Dino ────────────────
+    //    Power-ups añaden un tinte cálido MUY sutil; no cambian
+    //    la esencia monocromática.
+    let cBody  = '#535353';   // gris principal (idéntico al Chrome Dino)
+    let cDark  = '#2e2e2e';   // bordes oscuros / sombra
+    let cLight = '#7a7a7a';   // resaltes / borde superior
+    let cEye   = '#eeeeee';   // blanco del ojo
+    let cPupil = '#1c1c1c';   // pupila
+    let glowC  = 'rgba(83,83,83,0.45)';
+
+    if (Game.turbo > 0){
+      cBody='#5e3b22'; cDark='#311a09'; cLight='#8a6040'; glowC='rgba(255,110,30,0.70)';
+    } else if (this.scoreX2 > 0){
+      cBody='#524018'; cDark='#2f2508'; cLight='#807035'; glowC='rgba(255,205,50,0.60)';
     }
-    // Patas animadas (ciclo de carrera)
-    ctx.fillStyle=rgba(main.map(c=>c*0.7),1);
-    const legY=bodyTop+bodyH-2, legH=h*0.22, sw=Math.sin(this.runCycle), sw2=Math.sin(this.runCycle+Math.PI);
-    const phase = this.onGround?1:0.3;
-    rr(ctx, cx-bw*0.22 + sw*8*s*phase, legY, w*0.16, legH*(0.7+0.3*Math.abs(sw)), 3); ctx.fill();
-    rr(ctx, cx+bw*0.06 + sw2*8*s*phase, legY, w*0.16, legH*(0.7+0.3*Math.abs(sw2)), 3); ctx.fill();
-    // Brillo dorsal
-    if(!ghost){ ctx.fillStyle=rgba([255,255,255],0.25); rr(ctx, cx-bw*0.3, bodyTop+3, bw*0.5, bodyH*0.18, 6); ctx.fill(); }
+
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;  // bordes pixel art, sin suavizado
+
+    // Sombra / glow del personaje
+    if (!ghost){
+      ctx.shadowBlur  = Game.turbo > 0 ? 24 : 8;
+      ctx.shadowColor = glowC;
+    }
+
+    // Helper: rellena un rect relativo a (x, y) del personaje
+    const F = (col, rx, ry, rw, rh) => {
+      if (rw <= 0 || rh <= 0) return;
+      ctx.fillStyle = col;
+      ctx.fillRect(Math.round(x + rx), Math.round(y + ry),
+                   Math.max(1, Math.round(rw)), Math.max(1, Math.round(rh)));
+    };
+
+    const rc    = this.runCycle;
+    const inAir = !this.onGround;
+    const duck  = this.ducking && !inAir;
+
+    if (duck){
+      /* ══════════════ POSE AGACHADO ══════════════
+         El dino se aplana horizontalmente:
+         · Cabeza extendida hacia adelante
+         · Cuerpo bajo y alargado
+         · Cola más pronunciada a la izquierda
+         · Patas muy cortas, dobladas bajo el cuerpo          */
+
+      // Cola extendida (más visible agachado)
+      F(cDark,  -W*0.20, H*0.28, W*0.18, H*0.20);
+      F(cBody,  -W*0.08, H*0.22, W*0.18, H*0.30);
+
+      // Cuerpo principal (bajo y largo)
+      F(cBody,   W*0.02, H*0.22, W*0.62, H*0.54);
+      F(cLight,  W*0.04, H*0.22, W*0.56, H*0.07);  // resalte superior
+      F(cDark,   W*0.02, H*0.68, W*0.62, H*0.08);  // sombra inferior
+
+      // Cuello (corto, inclinado hacia adelante)
+      F(cBody,   W*0.52, H*0.06, W*0.22, H*0.24);
+
+      // Cabeza extendida hacia la derecha
+      F(cBody,   W*0.56, H*0.00, W*0.54, H*0.40);
+      F(cLight,  W*0.58, H*0.00, W*0.48, H*0.07);  // resalte top
+      F(cDark,   W*0.92, H*0.00, W*0.08, H*0.40);  // borde frontal oscuro
+
+      // Hocico extendido (más prominente en duck)
+      F(cBody,   W*0.76, H*0.22, W*0.28, H*0.22);
+      F(cDark,   W*0.78, H*0.32, W*0.24, H*0.04);  // línea de boca
+
+      // Mandíbula
+      F(cBody,   W*0.78, H*0.34, W*0.22, H*0.12);
+
+      // Ojo (dentro de la cabeza, más pequeño en duck)
+      if (!ghost){
+        ctx.shadowBlur = 0;
+        const ex = x + Math.round(W * 0.88);
+        const ey = y + Math.round(H * 0.10);
+        const er = Math.max(2, Math.round(W * 0.085));
+        ctx.fillStyle = cEye;
+        ctx.beginPath(); ctx.arc(ex, ey, er, 0, TAU); ctx.fill();
+        ctx.fillStyle = cPupil;
+        ctx.beginPath(); ctx.arc(ex + Math.round(er*0.25), ey - Math.round(er*0.10),
+                                  Math.max(1, Math.round(er*0.54)), 0, TAU); ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath(); ctx.arc(ex + Math.round(er*0.12), ey - Math.round(er*0.38),
+                                  Math.max(1, Math.round(er*0.24)), 0, TAU); ctx.fill();
+      }
+
+      // Patas muy cortas (agachado: visibles a los lados del cuerpo)
+      const legTopD = H * 0.72;
+      const thighD  = H * 0.16;
+      const footHD  = H * 0.12;
+      const footWD  = W * 0.22;
+      const legWD   = W * 0.15;
+      const legOsc  = Math.sin(rc) * W * 0.04;  // pequeña oscilación residual
+
+      // Pata trasera
+      F(cBody, W*0.10 + legOsc, legTopD,           legWD, thighD);
+      F(cDark, W*0.06 + legOsc, legTopD + thighD,  footWD, footHD);
+
+      // Pata delantera
+      F(cBody, W*0.32 - legOsc, legTopD,           legWD, thighD);
+      F(cDark, W*0.26 - legOsc, legTopD + thighD,  footWD, footHD);
+
+    } else {
+      /* ══════════════ POSE ERGUIDO (correr / saltar) ══════════════
+         Estructura fiel al Chrome Dino:
+           Cola → Cuerpo → Cuello → Cabeza+Hocico
+           Brazo vestigial en el torso
+           Dos patas con muslo + tibia + pie (animadas)             */
+
+      // ── COLA (se extiende a la izquierda del cuerpo) ─────────────
+      // Oscilación sutil sincronizada con el zancado
+      const tailOsc = Math.sin(rc * 0.5) * W * 0.05;
+      F(cBody, -W*0.04 + tailOsc, H*0.40, W*0.18, H*0.14);
+      F(cBody, -W*0.12 + tailOsc, H*0.48, W*0.16, H*0.12);
+      F(cDark, -W*0.18 + tailOsc, H*0.56, W*0.12, H*0.08);
+      // resalte de cola
+      if (!ghost) F(cLight, -W*0.02 + tailOsc, H*0.40, W*0.08, H*0.05);
+
+      // ── CUERPO PRINCIPAL ──────────────────────────────────────────
+      F(cBody,  W*0.04, H*0.38, W*0.64, H*0.40);
+      F(cLight, W*0.06, H*0.38, W*0.56, H*0.06);   // resalte dorsal
+      F(cDark,  W*0.04, H*0.72, W*0.64, H*0.06);   // sombra ventral
+
+      // ── CUELLO ────────────────────────────────────────────────────
+      F(cBody,  W*0.36, H*0.18, W*0.26, H*0.26);
+      F(cLight, W*0.36, H*0.18, W*0.26, H*0.05);   // resalte nuca
+
+      // ── CABEZA (bloque principal, arriba a la derecha) ────────────
+      F(cBody,  W*0.36, H*0.00, W*0.56, H*0.38);
+      F(cLight, W*0.38, H*0.00, W*0.50, H*0.06);   // franja superior
+      F(cDark,  W*0.88, H*0.00, W*0.04, H*0.38);   // borde frontal
+
+      // ── HOCICO (parte baja de la cabeza, se extiende a la derecha) ─
+      F(cBody,  W*0.70, H*0.18, W*0.28, H*0.20);
+      // Línea de boca (gap entre cabeza y mandíbula)
+      F(cDark,  W*0.72, H*0.28, W*0.24, H*0.03);
+      // Mandíbula inferior
+      F(cBody,  W*0.72, H*0.30, W*0.22, H*0.10);
+      // Pequeño detalle: narina (píxel oscuro en punta del hocico)
+      if (!ghost) F(cDark, W*0.92, H*0.20, W*0.04, H*0.04);
+
+      // ── OJO ───────────────────────────────────────────────────────
+      if (!ghost){
+        ctx.shadowBlur = 0;
+        const ex = x + Math.round(W * 0.74);
+        const ey = y + Math.round(H * 0.09);
+        const er = Math.max(3, Math.round(W * 0.095));
+
+        // Blanco del ojo
+        ctx.fillStyle = cEye;
+        ctx.beginPath(); ctx.arc(ex, ey, er, 0, TAU); ctx.fill();
+
+        // Pupila (desplazada al frente-arriba → mirada alerta hacia adelante)
+        ctx.fillStyle = cPupil;
+        ctx.beginPath();
+        ctx.arc(ex + Math.round(er * 0.24), ey - Math.round(er * 0.12),
+                Math.max(2, Math.round(er * 0.56)), 0, TAU);
+        ctx.fill();
+
+        // Brillo interior (punto de luz → da vida al ojo)
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(ex + Math.round(er * 0.10), ey - Math.round(er * 0.40),
+                Math.max(1, Math.round(er * 0.26)), 0, TAU);
+        ctx.fill();
+
+        // Micro-parpadeo cada ~3 s (párpado cae sobre mitad inferior del ojo)
+        const blinkSlot = Math.floor(performance.now() / 3200) % 9;
+        if (blinkSlot === 8){
+          ctx.fillStyle = cBody;
+          ctx.fillRect(ex - er, ey, er * 2, er + 1);
+        }
+      }
+
+      // ── BRAZO VESTIGIAL (pequeño, en el pecho) ───────────────────
+      // Ligera oscilación con el ciclo de carrera (microanimación)
+      const armSwing = Math.sin(rc) * W * 0.025;
+      F(cBody,  W*0.50 + armSwing, H*0.40, W*0.17, H*0.10);
+      F(cDark,  W*0.60 + armSwing, H*0.48, W*0.10, H*0.07);  // mano
+
+      // ── PATAS ANIMADAS ────────────────────────────────────────────
+      // Cada pata: muslo (rectángulo) + tibia + pie horizontal.
+      // swing ∈ [-1,+1]: +1 = pata hacia adelante (levantada y extendida)
+      //                  -1 = pata hacia atrás  (empujando el suelo)
+      // En el aire: amplitud reducida al 28% (patas semi-dobladas).
+      const amp   = inAir ? 0.28 : 1.0;
+      const swA   = Math.sin(rc)           * amp;  // pata izquierda (trasera → delantera)
+      const swB   = Math.sin(rc + Math.PI) * amp;  // pata derecha   (opuesta)
+
+      const legTopY = H * 0.76;            // Y de inicio del muslo
+      const thighH  = H * 0.14;            // altura del muslo
+      const shinH   = H * 0.12;            // altura de la tibia
+      const footW   = W * 0.24;            // anchura del pie
+      const footH   = H * 0.06;            // grosor del pie
+      const legW    = W * 0.16;            // anchura de muslo/tibia
+
+      // Pata A (izquierda / por defecto trasera)
+      const aoX = W*0.18 + swA * W*0.11;       // desplaz. horizontal
+      const aoY = legTopY - Math.max(0, swA) * H*0.06; // se levanta al avanzar
+      F(cBody, aoX,               aoY,                legW, thighH);
+      F(cBody, aoX - W*0.02,      aoY + thighH,       legW, shinH);
+      F(cDark, aoX - W*0.04,      aoY + thighH+shinH, footW, footH);
+      // Resalte de muslo
+      if (!ghost) F(cLight, aoX, aoY, legW, H*0.04);
+
+      // Pata B (derecha / por defecto delantera)
+      const boX = W*0.36 + swB * W*0.11;
+      const boY = legTopY - Math.max(0, swB) * H*0.06;
+      F(cBody, boX,               boY,                legW, thighH);
+      F(cBody, boX - W*0.02,      boY + thighH,       legW, shinH);
+      F(cDark, boX - W*0.04,      boY + thighH+shinH, footW, footH);
+      if (!ghost) F(cLight, boX, boY, legW, H*0.04);
+    }
+
     ctx.restore();
   }
 };
