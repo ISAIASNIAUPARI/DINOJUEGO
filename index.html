@@ -716,7 +716,7 @@ const World = {
    ───────────────────────────────────────────────────────────────────────── */
 const Player = {
   x:0, y:0, vy:0, w:46, h:64, baseH:64, duckH:38,
-  onGround:true, ducking:false, jumps:0, maxJumps:2,
+  onGround:true, ducking:false, jumps:0, maxJumps:3,
   coyote:0, runCycle:0, dead:false,
   shield:0, magnet:0, scoreX2:0, // temporizadores de power-ups (s)
   trail:[],
@@ -736,7 +736,7 @@ const Player = {
       this.vy=-940*s; this.onGround=false; this.coyote=0; this.jumps=1;
       Audio.sfx.jump();
       this._jumpFX();
-    } else if(this.jumps<this.maxJumps){ // doble salto
+    } else if(this.jumps<this.maxJumps){ // doble / triple salto
       this.vy=-820*s; this.jumps++;
       Audio.sfx.dblJump();
       this._jumpFX(true);
