@@ -171,7 +171,8 @@
   .char-card.special.selected{ box-shadow:0 0 36px rgba(255,43,214,.7); }
   .char-preview{ width:100px; height:80px; }   /* canvas miniatura */
   .char-name{ font-size:13px; font-weight:800; letter-spacing:.08em; text-align:center; }
-  .char-desc{ font-size:10px; opacity:.65; text-align:center; line-height:1.35; }
+  .char-desc{ font-size:11px; font-weight:700; color:var(--neon); text-align:center; line-height:1.35; margin-top:2px; }
+  .char-ability{ font-size:9.5px; opacity:.6; text-align:center; line-height:1.4; font-style:italic; }
   .char-price{ font-size:12px; font-weight:800; color:var(--gold); }
   .char-badge{ position:absolute; top:8px; right:8px; font-size:10px; font-weight:900;
     padding:2px 7px; border-radius:8px; letter-spacing:.06em; }
@@ -900,23 +901,47 @@ const World = {
    · 1 especial (Indoraptor) se desbloquea al tener los 4 premium.
    ───────────────────────────────────────────────────────────────────────── */
 const CHAR_DEFS = [
-  { id:'raptor',  name:'Velociraptor', desc:'Ágil y veloz',           price:0,    free:true,  special:false,
+  { id:'raptor',  name:'Velociraptor',
+    desc:'⚡ 4 saltos · Velocidad +15%',
+    ability:'4 saltos en el aire. Velocidad base 15% mayor.',
+    price:0,    free:true,  special:false,
     col:'#6a8fa0', acc:'#1e5a90', eye:'#e8b820', spiCol:null },
-  { id:'trex',    name:'T-Rex',        desc:'El clásico cazador',      price:0,    free:true,  special:false,
+  { id:'trex',    name:'T-Rex',
+    desc:'💥 Puntuación ×2 permanente',
+    ability:'Cada punto ganado cuenta el doble siempre.',
+    price:0,    free:true,  special:false,
     col:'#b06828', acc:'#5a2c08', eye:'#d8c030', spiCol:null },
-  { id:'spino',   name:'Spinosaurus',  desc:'La espina del abismo',    price:0,    free:true,  special:false,
+  { id:'spino',   name:'Spinosaurus',
+    desc:'🧲 Imán de monedas permanente',
+    ability:'Atrae monedas automáticamente todo el tiempo.',
+    price:0,    free:true,  special:false,
     col:'#3c2a1e', acc:'#b86010', eye:'#c8b030', spiCol:'#c87810' },
   // ── PREMIUM (desbloquear en orden) ──────────────────────────────────────
-  { id:'allo',    name:'Allosaurus',   desc:'Furia jurásica roja',     price:150,  free:false, special:false,
+  { id:'allo',    name:'Allosaurus',
+    desc:'🔥 Turbo recarga 2× rápido',
+    ability:'El turbo se recarga el doble de velocidad.',
+    price:150,  free:false, special:false,
     col:'#7a2010', acc:'#3c1060', eye:'#d09030', spiCol:null },
-  { id:'tricera', name:'Triceratops',  desc:'Escudo blindado',         price:300,  free:false, special:false,
+  { id:'tricera', name:'Triceratops',
+    desc:'🛡️ Escudo automático cada 20s',
+    ability:'Un escudo se activa solo cada 20 segundos.',
+    price:300,  free:false, special:false,
     col:'#3a5820', acc:'#284438', eye:'#c8921c', spiCol:null },
-  { id:'bluerex', name:'Rex Glacial',  desc:'Depredador del ártico',   price:500,  free:false, special:false,
+  { id:'bluerex', name:'Rex Glacial',
+    desc:'🌊 Gravedad reducida · Saltos enormes',
+    ability:'Gravedad al 55% — vuela más alto y cae lento.',
+    price:500,  free:false, special:false,
     col:'#2a4a6a', acc:'#b83818', eye:'#d8b828', spiCol:null },
-  { id:'ankylo',  name:'Ankylosaurus', desc:'Fortaleza de acero',      price:750,  free:false, special:false,
+  { id:'ankylo',  name:'Ankylosaurus',
+    desc:'🦴 2 HP · Velocidad máxima limitada',
+    ability:'Aguanta 2 golpes. La velocidad no supera el 60%.',
+    price:750,  free:false, special:false,
     col:'#48386a', acc:'#b04428', eye:'#d89020', spiCol:null },
   // ── ESPECIAL (se desbloquea al tener todos los premium) ─────────────────
-  { id:'indo',    name:'Indoraptor',   desc:'3× tamaño · HP · Turbo',  price:0,    free:false, special:true,
+  { id:'indo',    name:'Indoraptor',
+    desc:'💀 3 HP · 2× tamaño · Turbo automático',
+    ability:'3 vidas. El doble de grande. Turbo auto cada 30s.',
+    price:0,    free:false, special:true,
     col:'#141820', acc:'#b87018', eye:'#cc1818', spiCol:'#c87010' },
 ];
 const PREMIUM_IDS = ['allo','tricera','bluerex','ankylo'];
@@ -987,6 +1012,7 @@ const CharSelect = {
 
       const nm = document.createElement('div'); nm.className='char-name'; nm.textContent=def.name; card.appendChild(nm);
       const ds = document.createElement('div'); ds.className='char-desc'; ds.textContent=def.desc; card.appendChild(ds);
+      const ab = document.createElement('div'); ab.className='char-ability'; ab.textContent=def.ability||''; card.appendChild(ab);
 
       // Badge
       const badge = document.createElement('div'); badge.className='char-badge';
@@ -1049,6 +1075,14 @@ const Player = {
   shield:0, magnet:0, scoreX2:0,
   // ── Indoraptor ──────────────────────────────────
   hp:1, maxHP:1, indoBoostTimer:0, indoBoostActive:0, indoScaleMul:1,
+  // ── Habilidades por personaje ────────────────────
+  charSpeedMul:1,      // Velociraptor: +15% velocidad
+  charGravMul:1,       // Rex Glacial: gravedad reducida
+  charPermMagnet:false,// Spinosaurus: imán siempre activo
+  charScoreMul:1,      // T-Rex: ×2 puntuación
+  charTurboRateMul:1,  // Allosaurus: turbo recarga 2×
+  charAutoShieldCD:0,  // Triceratops: cuenta regresiva escudo auto
+  charMaxSpeedMul:999, // Ankylosaurus: limita la velocidad máxima
   trail:[],
 
   reset(){
@@ -1065,10 +1099,22 @@ const Player = {
     this.onGround=true; this.ducking=false; this.jumps=0; this.coyote=0;
     this.runCycle=0; this.dead=false; this.shield=0; this.magnet=0; this.scoreX2=0;
     // HP: Indoraptor tiene 3 vidas, resto 1
-    this.maxHP = isIndo ? 3 : 1;
+    this.maxHP = isIndo ? 3 : (def.id==='ankylo' ? 2 : 1);
     this.hp    = this.maxHP;
     this.indoBoostTimer  = isIndo ? rand(20,30) : 999;
     this.indoBoostActive = 0;
+
+    // ── Habilidades únicas por personaje ─────────────────────────────────
+    const id = def.id;
+    this.maxJumps        = id==='raptor' ? 4 : 3;
+    this.charSpeedMul    = id==='raptor' ? 1.15 : 1;
+    this.charGravMul     = id==='bluerex' ? 0.55 : 1;
+    this.charPermMagnet  = id==='spino';
+    this.charScoreMul    = id==='trex' ? 2 : 1;
+    this.charTurboRateMul= id==='allo' ? 2 : 1;
+    this.charAutoShieldCD= id==='tricera' ? 20 : 999999;
+    this.charMaxSpeedMul = id==='ankylo' ? 0.62 : 999;
+
     this.trail.length=0;
   },
 
@@ -1092,7 +1138,7 @@ const Player = {
   },
 
   update(dt){
-    const s=Game.scale, g=2300*s;
+    const s=Game.scale, g=2300*s * this.charGravMul;  // Rex Glacial: gravedad reducida
     // Salto con buffer + coyote-time
     if(Input.consumeJump()) this.jump();
     if(this.onGround) this.coyote=0.08; else this.coyote=Math.max(0,this.coyote-dt);
@@ -1138,6 +1184,22 @@ const Player = {
     this.shield=Math.max(0,this.shield-dt);
     this.magnet=Math.max(0,this.magnet-dt);
     this.scoreX2=Math.max(0,this.scoreX2-dt);
+
+    // ── Habilidades pasivas ───────────────────────────────────────────────
+    // Spinosaurus: imán permanente (siempre activo)
+    if(this.charPermMagnet) this.magnet=0.5;
+
+    // Triceratops: escudo automático cada 20s
+    if(this.charAutoShieldCD < 999999){
+      this.charAutoShieldCD = Math.max(0, this.charAutoShieldCD - dt);
+      if(this.charAutoShieldCD <= 0 && this.shield <= 0){
+        this.shield = 4;            // 4s de escudo
+        this.charAutoShieldCD = 20; // reinicia en 20s
+        Camera.kick(5);
+        UI.showBiome('🛡️ ESCUDO ACTIVADO', [92,255,177]);
+        Audio.sfx.power();
+      }
+    }
 
     // Estela de movimiento (motion blur)
     this.trail.unshift({x:this.x,y:this.y,h:this.h});
@@ -2637,7 +2699,9 @@ const Game = {
     this.elapsed+=dt;
     // Velocidad creciente + turbo
     const diff=this.difficulty();
-    this.baseSpeed = 420*this.scale + diff*520*this.scale;       // sube con el tiempo
+    // Velocidad base × multiplicador del personaje (Velociraptor +15%)
+    this.baseSpeed = (420*this.scale + diff*520*this.scale) * Player.charSpeedMul;
+
     // Boost del Indoraptor (+20% auto cada 25-35 s durante 10 s)
     if(CharSelect.selected==='indo'){
       Player.indoBoostTimer-=dt;
@@ -2649,14 +2713,19 @@ const Game = {
       Player.indoBoostActive=Math.max(0,Player.indoBoostActive-dt);
     }
     const turboMul = this.turbo>0 ? 1.7 : (Player.indoBoostActive>0 ? 1.2 : 1);
-    this.speed = this.baseSpeed*turboMul;
-    this.turbo=Math.max(0,this.turbo-dt);
+    // Ankylosaurus: velocidad máxima limitada al 62% del máximo posible
+    const rawSpeed = this.baseSpeed * turboMul;
+    const maxAllowed = (420*this.scale + 520*this.scale) * Player.charMaxSpeedMul;
+    this.speed = Math.min(rawSpeed, maxAllowed);
+
+    // Allosaurus: el turbo se recarga 2× más rápido (se consume más lento)
+    this.turbo = Math.max(0, this.turbo - dt / Player.charTurboRateMul);
     Audio.setTempo(diff);
 
     // Progreso de mundo y métricas
     World.update(dt, this.speed);
     this.distance += this.speed*dt/22;          // “metros”
-    this.score += this.speed*dt/14 * (this.turbo>0?2:1) * (Player.scoreX2>0?2:1);
+    this.score += this.speed*dt/14 * (this.turbo>0?2:1) * (Player.scoreX2>0?2:1) * Player.charScoreMul;
 
     // Combo decae si no hay eventos
     this.comboTimer-=dt; if(this.comboTimer<=0 && this.combo>0){ this.combo=Math.max(0,this.combo-1); this.comboTimer=0.5; }
