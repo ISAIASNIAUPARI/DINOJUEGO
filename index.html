@@ -992,8 +992,14 @@ const Player = {
     // Altura objetivo (agachado o normal) con interpolación suave
     // Agacharse: snap instantáneo → sin delay ni tremblor.
     // Levantarse: lerp rápido solo para la transición de pie (evita pop).
-    if(this.ducking && this.onGround){
-      this.h = this.duckH;                                    // inmediato
+    if(this.ducking){
+      // Snap h AND y simultaneously so onGround never turns false mid-duck
+      this.h  = this.duckH;
+      this.vy = Math.min(this.vy, 0); // cancel any downward drift
+      // If already on ground, pin y instantly – no 1-frame gap
+      if(this.onGround){
+        this.y = Game.groundY - this.duckH;
+      }
     } else {
       this.h = lerp(this.h, this.baseH, clamp(dt*22, 0, 1)); // levantarse suave
       if(Math.abs(this.h - this.baseH) < 1) this.h = this.baseH; // snap final
@@ -1106,7 +1112,7 @@ const Player = {
 
     const rc    = this.runCycle;
     const inAir = !this.onGround;
-    const duck  = this.ducking && !inAir;
+    const duck  = this.ducking; // pose agachado siempre que la tecla esté presionada
 
     if (duck){
       /* ══════════════ POSE AGACHADO ══════════════
@@ -1301,7 +1307,7 @@ function drawCharacter(ctx, id, x, y, w, h, ghost, rc){
   x=Math.round(x); y=Math.round(y);
   const W=Math.round(w), H=Math.round(h);
   const def = CHAR_DEFS.find(c=>c.id===id)||CHAR_DEFS[0];
-  const duck  = Player.ducking && Player.onGround;
+  const duck  = Player.ducking; // show duck pose whenever key held (y+h already pinned)
   const inAir = !Player.onGround;
 
   // Tinte de power-ups
