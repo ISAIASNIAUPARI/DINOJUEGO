@@ -1026,7 +1026,7 @@ const CharSelect = {
    8) JUGADOR — física + animación procedural (dino estilizado).
    ───────────────────────────────────────────────────────────────────────── */
 const Player = {
-  x:0, y:0, vy:0, w:46, h:64, baseH:64, duckH:38,
+  x:0, y:0, vy:0, w:46, h:64, baseH:64, shrinkScale:1,
   onGround:true, ducking:false, jumps:0, maxJumps:3,
   coyote:0, runCycle:0, dead:false,
   shield:0, magnet:0, scoreX2:0,
@@ -1042,7 +1042,7 @@ const Player = {
     this.indoScaleMul = isIndo ? 2.0 : 1.0;
     this.w = 46*s*this.indoScaleMul;
     this.baseH = 64*s*this.indoScaleMul;
-    this.duckH = 38*s*this.indoScaleMul;
+    this.shrinkScale = 1;
     this.h = this.baseH;
     this.x=Game.W*0.18; this.y=Game.groundY-this.h; this.vy=0;
     this.onGround=true; this.ducking=false; this.jumps=0; this.coyote=0;
@@ -1083,36 +1083,36 @@ const Player = {
     // Corte de salto variable (suelta tecla = sube menos)
     if(!Input.jumpHeld && this.vy<0) this.vy*=Math.pow(0.06,dt);
 
-    // Agacharse solo en el suelo (en el aire = caída rápida)
+    // Agacharse: tecla abajo = encogerse
     this.ducking = Input.duckHeld;
+    // En el aire + abajo = caída rápida
     if(this.ducking && !this.onGround){ this.vy += g*0.9*dt; }
 
     // Física vertical
     this.vy += g*dt;
     this.y  += this.vy*dt;
 
-    // Altura objetivo (agachado o normal) con interpolación suave
-    // Agacharse: snap instantáneo → sin delay ni tremblor.
-    // Levantarse: lerp rápido solo para la transición de pie (evita pop).
+    // ── SHRINK SCALE ─────────────────────────────────────────────────────
+    // Al apretar abajo el personaje se hace más pequeño (escala 0.42 de su
+    // altura base). Sin animación de pose → cero tremblor posible.
+    // Encoger: snap instantáneo. Volver a normal: suave.
+    const MINI = 0.42; // qué tan pequeño se vuelve
     if(this.ducking){
-      // Snap h AND y simultaneously so onGround never turns false mid-duck
-      this.h  = this.duckH;
-      this.vy = Math.min(this.vy, 0); // cancel any downward drift
-      // If already on ground, pin y instantly – no 1-frame gap
-      if(this.onGround){
-        this.y = Game.groundY - this.duckH;
-      }
+      this.shrinkScale = MINI;                          // encoge al instante
     } else {
-      this.h = lerp(this.h, this.baseH, clamp(dt*22, 0, 1)); // levantarse suave
-      if(Math.abs(this.h - this.baseH) < 1) this.h = this.baseH; // snap final
+      this.shrinkScale = lerp(this.shrinkScale, 1, clamp(dt*14, 0, 1));
+      if(this.shrinkScale > 0.995) this.shrinkScale = 1;
     }
+    this.h = this.baseH * this.shrinkScale;
 
-    // Colisión con el suelo
-    const floor=Game.groundY-this.h;
-    if(this.y>=floor){
-      if(!this.onGround && this.vy>120*s){ Audio.sfx.land(); this._landFX(); }
-      this.y=floor; this.vy=0; this.onGround=true; this.jumps=0;
-    } else this.onGround=false;
+    // Colisión con el suelo — y siempre pegado al suelo cuando está en él
+    const floor = Game.groundY - this.h;
+    if(this.y >= floor){
+      if(!this.onGround && this.vy > 120*s){ Audio.sfx.land(); this._landFX(); }
+      this.y = floor; this.vy = 0; this.onGround = true; this.jumps = 0;
+    } else {
+      this.onGround = false;
+    }
 
     // Ciclo de carrera
     if(this.onGround) this.runCycle += dt*Math.min(20, 9+Game.speed/60);
@@ -1137,10 +1137,13 @@ const Player = {
     Particles.burst(this.x+this.w/2,cy,12,{vx:rand(-200,200),vy:rand(-10,-90),g:500,color:Biome.C('ground').map(c=>c+50),size:rand(2,5),life:0.5,glow:false});
   },
 
-  /** Caja de colisión (algo más pequeña que el sprite = colisiones justas). */
+  /** Caja de colisión — escala junto con el sprite shrink. */
   box(){
-    const pad=this.w*0.18;
-    return { x:this.x+pad, y:this.y+this.h*0.06, w:this.w-pad*2, h:this.h*0.9 };
+    const pad = this.w*0.18;
+    // Cuando está encogido (ducking) la hitbox también es más pequeña y más alta
+    // (el sprite se aplana → damos margen extra arriba)
+    const topOff = this.ducking ? this.h*0.08 : this.h*0.06;
+    return { x:this.x+pad, y:this.y+topOff, w:this.w-pad*2, h:this.h*0.88 };
   },
 
   draw(ctx){
@@ -1214,7 +1217,7 @@ const Player = {
 
     const rc    = this.runCycle;
     const inAir = !this.onGround;
-    const duck  = this.ducking; // pose agachado siempre que la tecla esté presionada
+    const duck  = false; // shrink-scale maneja el tamaño; sin pose especial de agachado
 
     if (duck){
       /* ══════════════ POSE AGACHADO ══════════════
@@ -1409,7 +1412,7 @@ function drawCharacter(ctx, id, x, y, w, h, ghost, rc){
   x=Math.round(x); y=Math.round(y);
   const W=Math.round(w), H=Math.round(h);
   const def = CHAR_DEFS.find(c=>c.id===id)||CHAR_DEFS[0];
-  const duck  = Player.ducking; // show duck pose whenever key held (y+h already pinned)
+  const duck  = false;  // shrink-scale handles size; no separate duck pose needed
   const inAir = !Player.onGround;
 
   // Tinte de power-ups
